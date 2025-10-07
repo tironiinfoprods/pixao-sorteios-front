@@ -393,6 +393,16 @@ export default function AdminDashboard() {
               <br /> CLIENTES
             </BigCard>
 
+            <BigCard color="blue"  onClick={() => navigate("/admin/AdminClientesUser")}>
+              CADASTRO INFOPRODUTOS
+              <br /> 
+            </BigCard>
+
+            <BigCard color="red"  onClick={() => navigate("/admin/AdminClientesUser")}>
+              CADASTRO CATEGORIAS
+              <br /> 
+            </BigCard>
+
             <br />
             <Divider sx={{ my: 3, borderColor: "rgba(255,255,255,0.18)", borderBottomWidth: 2 }} />
             <br />

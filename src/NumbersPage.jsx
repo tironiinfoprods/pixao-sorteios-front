@@ -1,9 +1,8 @@
-// src/NewStorePage.jsx
-// Home com vibe de sorteio: HERO alegre + cartela intacta + CTA WhatsApp
+// NumbersPage.jsx
+// Tela separada só com a tabela de números + fluxo de pagamento
 import * as React from "react";
 import { useNavigate, Link as RouterLink } from "react-router-dom";
 import logoNewStore from "./Logo-branca-sem-fundo-768x132.png";
-import heroImage from "./hero_image.png";
 import { SelectionContext } from "./selectionContext";
 import PixModal from "./PixModal";
 import { createPixPayment, checkPixStatus } from "./services/pix";
@@ -33,7 +32,6 @@ import {
 } from "@mui/material";
 import AccountCircleRoundedIcon from "@mui/icons-material/AccountCircleRounded";
 
-// Tema
 const theme = createTheme({
   palette: {
     mode: "dark",
@@ -49,22 +47,14 @@ const theme = createTheme({
   },
 });
 
-// Helpers
 const pad2 = (n) => n.toString().padStart(2, "0");
-
-// Mocks
 const MOCK_RESERVADOS = [];
 const MOCK_INDISPONIVEIS = [];
-
-// Base do backend
 const API_BASE = (
   process.env.REACT_APP_API_BASE_URL ||
   process.env.REACT_APP_API_BASE ||
   "https://newstore-backend.onrender.com"
 ).replace(/\/+$/, "");
-
-// Plano de fundo do HERO (pessoas felizes)
-const HERO_BG = heroImage;
 
 // ===== Helpers de auth + reserva =====
 function sanitizeToken(t) {
@@ -115,7 +105,7 @@ async function reserveNumbers(numbers) {
     const j = await r.json().catch(() => ({}));
     throw new Error(j?.error || "Falha ao reservar");
   }
-  return r.json(); // { reservationId, drawId, expiresAt, numbers }
+  return r.json();
 }
 
 // Checagem do limite no backend
@@ -143,72 +133,13 @@ async function checkUserPurchaseLimit({ addCount = 0, drawId } = {}) {
   if (!res.ok) throw new Error(`limit_check_${res.status}`);
 
   const j = await res.json().catch(() => ({}));
-  const blocked = !!(
-    j?.blocked ?? j?.limitReached ?? j?.reached ?? j?.exceeded
-  );
+  const blocked = !!(j?.blocked ?? j?.limitReached ?? j?.reached ?? j?.exceeded);
   const current = j?.current ?? j?.cnt ?? j?.count ?? null;
   const max = j?.max ?? j?.limit ?? j?.MAX ?? null;
   return { blocked, current, max };
 }
 
-// Brilhos animados no HERO
-function Sparkles() {
-  const base = {
-    position: "absolute",
-    width: 10,
-    height: 10,
-    borderRadius: "50%",
-    bgcolor: "#FFD54F",
-    filter: "drop-shadow(0 0 8px rgba(255,213,79,0.9))",
-    opacity: 0.9,
-  };
-  return (
-    <>
-      <Box
-        sx={{
-          ...base,
-          left: "6%",
-          top: "18%",
-          animation: "float1 5.5s ease-in-out infinite",
-          "@keyframes float1": {
-            "0%,100%": { transform: "translateY(0) scale(1)" },
-            "50%": { transform: "translateY(-10px) scale(1.15)" },
-          },
-        }}
-      />
-      <Box
-        sx={{
-          ...base,
-          left: "88%",
-          top: "24%",
-          width: 8,
-          height: 8,
-          animation: "float2 6.2s ease-in-out infinite",
-          "@keyframes float2": {
-            "0%,100%": { transform: "translateY(0) scale(1)" },
-            "50%": { transform: "translateY(-14px) scale(1.2)" },
-          },
-        }}
-      />
-      <Box
-        sx={{
-          ...base,
-          left: "72%",
-          top: "62%",
-          width: 12,
-          height: 12,
-          animation: "float3 7s ease-in-out infinite",
-          "@keyframes float3": {
-            "0%,100%": { transform: "translateY(0) scale(1)" },
-            "50%": { transform: "translateY(-12px) scale(1.1)" },
-          },
-        }}
-      />
-    </>
-  );
-}
-
-export default function NewStorePage({
+export default function NumbersPage({
   reservados = MOCK_RESERVADOS,
   indisponiveis = MOCK_INDISPONIVEIS,
   groupUrl = "https://chat.whatsapp.com/Byb4qBRseWwC5IVyV8enRC",
@@ -220,34 +151,21 @@ export default function NewStorePage({
   const isAuthenticated = !!(user?.email || user?.id || token);
   const logoTo = isAuthenticated ? "/conta" : "/";
 
-  // Estados vindos do backend
+  // Estados do backend
   const [srvReservados, setSrvReservados] = React.useState([]);
   const [srvIndisponiveis, setSrvIndisponiveis] = React.useState([]);
-
-  // Iniciais dos vendidos
   const [soldInitials, setSoldInitials] = React.useState({});
 
-  // Preço dinâmico
   const FALLBACK_PRICE = Number(process.env.REACT_APP_PIX_PRICE) || 55;
   const [unitPrice, setUnitPrice] = React.useState(FALLBACK_PRICE);
-
-  // Config dinâmicas
   const [bannerTitle, setBannerTitle] = React.useState("");
   const [maxSelect, setMaxSelect] = React.useState(5);
-
-  // Draw atual
   const [currentDrawId, setCurrentDrawId] = React.useState(null);
 
-  // Limite acumulado do usuário
-  const [limitUsage, setLimitUsage] = React.useState({
-    current: null,
-    max: null,
-  });
+  const [limitUsage, setLimitUsage] = React.useState({ current: null, max: null });
 
-  // Carrega config
   React.useEffect(() => {
     let alive = true;
-
     (async () => {
       try {
         const res = await fetch(`${API_BASE}/api/config`, {
@@ -275,9 +193,7 @@ export default function NewStorePage({
             j?.current_draw?.id;
           if (alive && did != null) setCurrentDrawId(did);
 
-          if (alive && typeof j?.banner_title === "string") {
-            setBannerTitle(j.banner_title);
-          }
+          if (alive && typeof j?.banner_title === "string") setBannerTitle(j.banner_title);
 
           const maxSel =
             j?.max_numbers_per_selection ?? j?.max_select ?? j?.selection_limit;
@@ -285,29 +201,21 @@ export default function NewStorePage({
             setMaxSelect(Number(maxSel));
           }
         }
-      } catch {
-        /* fallback silencioso */
-      } finally {
+      } catch {}
+      finally {
         try {
-          const info = await checkUserPurchaseLimit({
-            addCount: 0,
-            drawId: currentDrawId,
-          });
+          const info = await checkUserPurchaseLimit({ addCount: 0, drawId: currentDrawId });
           if (alive) setLimitUsage({ current: info.current, max: info.max });
         } catch {}
       }
     })();
-
-    return () => {
-      alive = false;
-    };
+    return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [API_BASE]);
 
   // Polling /api/numbers
   React.useEffect(() => {
     let alive = true;
-
     async function load() {
       try {
         const res = await fetch(`${API_BASE}/api/numbers`, {
@@ -328,31 +236,19 @@ export default function NewStorePage({
           if (st === "taken" || st === "sold") {
             indis.push(num);
             const rawInit =
-              it.initials ||
-              it.owner_initials ||
-              it.ownerInitials ||
-              it.owner ||
-              it.oi;
-            if (rawInit) {
-              initials[num] = String(rawInit).slice(0, 3).toUpperCase();
-            }
+              it.initials || it.owner_initials || it.ownerInitials || it.owner || it.oi;
+            if (rawInit) initials[num] = String(rawInit).slice(0, 3).toUpperCase();
           }
         }
         if (!alive) return;
         setSrvReservados(Array.from(new Set(reserv)));
         setSrvIndisponiveis(Array.from(new Set(indis)));
         setSoldInitials(initials);
-      } catch {
-        /* silencioso */
-      }
+      } catch {}
     }
-
     load();
     const id = setInterval(load, 15000);
-    return () => {
-      alive = false;
-      clearInterval(id);
-    };
+    return () => { alive = false; clearInterval(id); };
   }, []);
 
   const reservadosAll = React.useMemo(
@@ -360,8 +256,7 @@ export default function NewStorePage({
     [reservados, srvReservados]
   );
   const indisponiveisAll = React.useMemo(
-    () =>
-      Array.from(new Set([...(indisponiveis || []), ...srvIndisponiveis])),
+    () => Array.from(new Set([...(indisponiveis || []), ...srvIndisponiveis])),
     [indisponiveis, srvIndisponiveis]
   );
 
@@ -370,19 +265,9 @@ export default function NewStorePage({
   const menuOpen = Boolean(menuEl);
   const handleOpenMenu = (e) => setMenuEl(e.currentTarget);
   const handleCloseMenu = () => setMenuEl(null);
-  const goConta = () => {
-    handleCloseMenu();
-    navigate("/conta");
-  };
-  const goLogin = () => {
-    handleCloseMenu();
-    navigate("/login");
-  };
-  const doLogout = () => {
-    handleCloseMenu();
-    logout();
-    navigate("/");
-  };
+  const goConta = () => { handleCloseMenu(); navigate("/conta"); };
+  const goLogin = () => { handleCloseMenu(); navigate("/login"); };
+  const doLogout = () => { handleCloseMenu(); logout(); navigate("/"); };
 
   // modal confirmação
   const [open, setOpen] = React.useState(false);
@@ -405,36 +290,23 @@ export default function NewStorePage({
 
   // Modal de limite
   const [limitOpen, setLimitOpen] = React.useState(false);
-  const [limitInfo, setLimitInfo] = React.useState({
-    type: "purchase",
-    current: undefined,
-    max: undefined,
-  });
-  const openLimitModal = (info) => {
-    setLimitInfo(info || { type: "purchase" });
-    setLimitOpen(true);
-  };
+  const [limitInfo, setLimitInfo] = React.useState({ type: "purchase", current: undefined, max: undefined });
+  const openLimitModal = (info) => { setLimitInfo(info || { type: "purchase" }); setLimitOpen(true); };
 
-  // Quantos ainda pode comprar segundo o servidor
-  const remainingFromServer =
-    (limitUsage.max ?? Infinity) - (limitUsage.current ?? 0);
+  const remainingFromServer = (limitUsage.max ?? Infinity) - (limitUsage.current ?? 0);
 
   const handleIrPagamento = async () => {
     setOpen(false);
 
     if (!isAuthenticated) {
-      navigate("/login", { replace: false, state: { from: "/", wantPay: true } });
+      navigate("/login", { replace: false, state: { from: "/numeros", wantPay: true } });
       return;
     }
 
     const addCount = selecionados.length || 1;
 
     try {
-      const { blocked, current, max } = await checkUserPurchaseLimit({
-        addCount,
-        drawId: currentDrawId,
-      });
-
+      const { blocked, current, max } = await checkUserPurchaseLimit({ addCount, drawId: currentDrawId });
       const wouldBe = (current ?? 0) + addCount;
       const overByFront = Number.isFinite(max) && wouldBe > max;
 
@@ -468,8 +340,7 @@ export default function NewStorePage({
       setPixData(data);
 
       setLimitUsage((old) => ({
-        current:
-          Number.isFinite(old.current) ? (old.current ?? 0) + addCount : old.current,
+        current: Number.isFinite(old.current) ? (old.current ?? 0) + addCount : old.current,
         max: old.max,
       }));
     } catch (e) {
@@ -503,20 +374,12 @@ export default function NewStorePage({
       if (already) return prev.filter((x) => x !== n);
 
       if (prev.length >= maxSelect) {
-        openLimitModal({
-          type: "selection",
-          current: maxSelect,
-          max: maxSelect,
-        });
+        openLimitModal({ type: "selection", current: maxSelect, max: maxSelect });
         return prev;
       }
 
       if (Number.isFinite(remainingFromServer) && remainingFromServer <= prev.length) {
-        openLimitModal({
-          type: "purchase",
-          current: limitUsage.current ?? 0,
-          max: limitUsage.max ?? 5,
-        });
+        openLimitModal({ type: "purchase", current: limitUsage.current ?? 0, max: limitUsage.max ?? 5 });
         return prev;
       }
 
@@ -561,20 +424,10 @@ export default function NewStorePage({
       <CssBaseline />
 
       {/* Topo */}
-      <AppBar
-        position="sticky"
-        elevation={0}
-        sx={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}
-      >
+      <AppBar position="sticky" elevation={0} sx={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
         <Toolbar sx={{ position: "relative", minHeight: 64 }}>
-          <IconButton edge="start" color="inherit">{/* espaço */}</IconButton>
-
-          <Button
-            component={RouterLink}
-            to="/cadastro"
-            variant="text"
-            sx={{ fontWeight: 700, mt: 1 }}
-          >
+          <IconButton edge="start" color="inherit" />
+          <Button component={RouterLink} to="/cadastro" variant="text" sx={{ fontWeight: 700, mt: 1 }}>
             Criar conta
           </Button>
 
@@ -594,12 +447,7 @@ export default function NewStorePage({
               alignItems: "center",
             }}
           >
-            <Box
-              component="img"
-              src={logoNewStore}
-              alt="NEW STORE"
-              sx={{ height: 80, objectFit: "contain" }}
-            />
+            <Box component="img" src={logoNewStore} alt="NEW STORE" sx={{ height: 80, objectFit: "contain" }} />
           </Box>
 
           <IconButton color="inherit" sx={{ ml: "auto" }} onClick={handleOpenMenu}>
@@ -627,123 +475,16 @@ export default function NewStorePage({
 
       <Container maxWidth="lg" sx={{ py: { xs: 4, md: 6 } }}>
         <Stack spacing={4}>
-          {/* ====== HERO alegre (loteria) ====== */}
-          <Paper
-            elevation={0}
-            sx={{
-              p: { xs: 3, md: 6 },
-              borderRadius: 3,
-              position: "relative",
-              overflow: "hidden",
-              background:
-                "radial-gradient(1000px 500px at -10% -10%, rgba(255,193,7,0.12), transparent 60%), radial-gradient(1000px 500px at 110% 110%, rgba(103,194,58,0.12), transparent 60%), linear-gradient(180deg, rgba(18,18,18,0.85), rgba(18,18,18,0.85))",
-              border: "1px solid rgba(255,255,255,0.06)",
-            }}
-          >
-            {/* imagem de fundo (pessoas felizes) */}
-            <Box
-              aria-hidden
-              sx={{
-                position: "absolute",
-                inset: 0,
-                backgroundImage: `url(${HERO_BG})`,
-                backgroundSize: "cover",
-                backgroundPosition: "center",
-                opacity: 0.18,
-                mixBlendMode: "screen",
-              }}
-            />
-            <Sparkles />
-
-            <Stack spacing={2} sx={{ position: "relative", zIndex: 1, textAlign: "center" }}>
-              <Typography
-                variant="overline"
-                sx={{ letterSpacing: 2, color: "secondary.main", fontWeight: 900 }}
-              >
-                SORTEIO OFICIAL • PIXÃO NA MÃO
-              </Typography>
-
-              <Typography
-                variant="h3"
-                sx={{
-                  fontWeight: 900,
-                  lineHeight: 1.1,
-                  background: "linear-gradient(90deg,#FFD54F,#FFF176,#67C23A)",
-                  WebkitBackgroundClip: "text",
-                  backgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  textShadow: "0 0 24px rgba(255,213,79,0.25)",
-                }}
-              >
-                Ganhe prêmios e ainda fica com crédito no site!
-              </Typography>
-
-              <Typography variant="h6" sx={{ opacity: 0.9, maxWidth: 860, mx: "auto" }}>
-                Clima de loteria: escolha seus números, concorra e aproveite o saldo em
-                cartão presente. Diversão, transparência e chances reais de ganhar.
-              </Typography>
-
-              <Stack
-                direction={{ xs: "column", sm: "row" }}
-                spacing={1.5}
-                justifyContent="center"
-                sx={{ mt: 1 }}
-              >
-                <Button
-                  variant="contained"
-                  color="success"
-                  size="large"
-                  onClick={() =>
-                    document.getElementById("cartela")?.scrollIntoView({ behavior: "smooth" })
-                  }
-                  sx={{ px: 3, py: 1.4, fontWeight: 900, letterSpacing: 0.4 }}
-                >
-                  ESCOLHER NÚMEROS 🎯
-                </Button>
-
-                <Button
-                  component="a"
-                  href={groupUrl}
-                  target="_blank"
-                  rel="noopener"
-                  size="large"
-                  variant="outlined"
-                  color="inherit"
-                  sx={{
-                    px: 3,
-                    py: 1.4,
-                    fontWeight: 900,
-                    letterSpacing: 0.4,
-                    borderColor: "rgba(255,255,255,0.35)",
-                  }}
-                >
-                  ENTRAR NO GRUPO WHATS 💬
-                </Button>
-              </Stack>
-
-              <Stack direction="row" spacing={2} justifyContent="center" sx={{ mt: 2, flexWrap: "wrap" }}>
-                <Chip label="Pagamento via PIX" color="success" variant="filled" />
-                <Chip label="Sorteio auditável" variant="outlined" />
-                <Chip label="Crédito acumulativo" variant="outlined" />
-              </Stack>
-            </Stack>
-          </Paper>
-
-          {/* ====== CARTELA (tabela) — MANTIDA ====== */}
-          <Paper
-            id="cartela"
-            variant="outlined"
-            sx={{ p: { xs: 1.5, md: 3 }, bgcolor: "background.paper" }}
-          >
-            {/* >>>>> BANNER SUPERIOR (dinâmico) */}
+          {/* Cartela (tabela) */}
+          <Paper variant="outlined" sx={{ p: { xs: 1.5, md: 3 }, bgcolor: "background.paper" }}>
+            {/* Banner dinâmico */}
             <Box
               sx={{
                 mb: 2,
                 p: { xs: 1.25, md: 1.5 },
                 borderRadius: 2,
                 border: "1px solid rgba(255,255,255,0.12)",
-                background:
-                  "linear-gradient(90deg, rgba(103,194,58,0.12), rgba(255,193,7,0.10))",
+                background: "linear-gradient(90deg, rgba(103,194,58,0.12), rgba(255,193,7,0.10))",
               }}
             >
               <Typography
@@ -759,8 +500,7 @@ export default function NewStorePage({
                   textShadow: "0 0 12px rgba(103,194,58,0.18)",
                 }}
               >
-                {bannerTitle ||
-                  "Sorteio de um Watch Winder Caixa de Suporte Rotativo Para Relógios Automáticos"}
+                {bannerTitle || "Escolha seus números e boa sorte!"}
               </Typography>
             </Box>
 
@@ -772,39 +512,20 @@ export default function NewStorePage({
               sx={{ mb: 2 }}
             >
               <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap">
-                <Chip
-                  size="small"
-                  label="DISPONÍVEL"
-                  sx={{ bgcolor: "primary.main", color: "#0E0E0E", fontWeight: 700 }}
-                />
+                <Chip size="small" label="DISPONÍVEL" sx={{ bgcolor: "primary.main", color: "#0E0E0E", fontWeight: 700 }} />
                 <Chip
                   size="small"
                   label="RESERVADO"
-                  sx={{
-                    bgcolor: "rgba(255,193,7,0.18)",
-                    border: "1px solid",
-                    borderColor: "secondary.main",
-                    color: "secondary.main",
-                    fontWeight: 700,
-                  }}
+                  sx={{ bgcolor: "rgba(255,193,7,0.18)", border: "1px solid", borderColor: "secondary.main", color: "secondary.main", fontWeight: 700 }}
                 />
                 <Chip
                   size="small"
                   label="INDISPONÍVEL"
-                  sx={{
-                    bgcolor: "rgba(211,47,47,0.18)",
-                    border: "1px solid",
-                    borderColor: "error.main",
-                    color: "error.main",
-                    fontWeight: 700,
-                  }}
+                  sx={{ bgcolor: "rgba(211,47,47,0.18)", border: "1px solid", borderColor: "error.main", color: "error.main", fontWeight: 700 }}
                 />
                 <Typography variant="body2" sx={{ ml: 0.5, opacity: 0.9 }}>
                   {Number.isFinite(limitUsage.max) && Number.isFinite(limitUsage.current)
-                    ? `• Você tem ${Math.max(
-                        0,
-                        (limitUsage.max ?? 0) - (limitUsage.current ?? 0)
-                      )} de ${limitUsage.max} possíveis`
+                    ? `• Você tem ${Math.max(0, (limitUsage.max ?? 0) - (limitUsage.current ?? 0))} de ${limitUsage.max} possíveis`
                     : " "}
                 </Typography>
                 {!!selecionados.length && (
@@ -815,26 +536,16 @@ export default function NewStorePage({
               </Stack>
 
               <Stack direction="row" spacing={1.5}>
-                <Button
-                  variant="outlined"
-                  color="inherit"
-                  disabled={!selecionados.length}
-                  onClick={limparSelecao}
-                >
+                <Button variant="outlined" color="inherit" disabled={!selecionados.length} onClick={limparSelecao}>
                   LIMPAR SELEÇÃO
                 </Button>
-                <Button
-                  variant="contained"
-                  color="success"
-                  disabled={continuarDisabled}
-                  onClick={handleAbrirConfirmacao}
-                >
+                <Button variant="contained" color="success" disabled={continuarDisabled} onClick={handleAbrirConfirmacao}>
                   CONTINUAR
                 </Button>
               </Stack>
             </Stack>
 
-            {/* Grid 10x10 (NÃO ALTERAR) */}
+            {/* Grid 10x10 */}
             <Box
               sx={{
                 width: { xs: "calc(100vw - 32px)", sm: "calc(100vw - 64px)", md: "100%" },
@@ -855,7 +566,7 @@ export default function NewStorePage({
                 }}
               >
                 {Array.from({ length: 100 }).map((_, idx) => {
-                  const sold = isIndisponivel(idx);
+                  const sold = indisponiveisAll.includes(idx);
                   const initials = soldInitials[idx];
                   return (
                     <Box
@@ -875,17 +586,13 @@ export default function NewStorePage({
                         position: "relative",
                       }}
                     >
-                      {/* Número central */}
                       <Box
                         component="span"
-                        sx={{
-                          display: { xs: sold ? "none" : "inline", md: "inline" },
-                        }}
+                        sx={{ display: { xs: sold ? "none" : "inline", md: "inline" } }}
                       >
                         {pad2(idx)}
                       </Box>
 
-                      {/* Mobile: número + iniciais empilhados quando vendido */}
                       {sold && (
                         <Box
                           sx={{
@@ -899,9 +606,7 @@ export default function NewStorePage({
                             pointerEvents: "none",
                           }}
                         >
-                          <Box sx={{ fontWeight: 900, lineHeight: 1 }}>
-                            {pad2(idx)}
-                          </Box>
+                          <Box sx={{ fontWeight: 900, lineHeight: 1 }}>{pad2(idx)}</Box>
                           {initials && (
                             <Box
                               sx={{
@@ -923,7 +628,6 @@ export default function NewStorePage({
                         </Box>
                       )}
 
-                      {/* Desktop: iniciais no canto */}
                       {sold && initials && (
                         <Box
                           sx={{
@@ -969,15 +673,14 @@ export default function NewStorePage({
             </Box>
           </Paper>
 
-          {/* ====== CONVITE PARA O GRUPO (mantido) ====== */}
+          {/* Convite para o grupo */}
           <Paper
             variant="outlined"
             sx={{
               p: { xs: 3, md: 4 },
               textAlign: "center",
-              bgcolor:
-                "linear-gradient(180deg, rgba(255,193,7,0.06), rgba(103,194,58,0.06))",
-              borderColor: "rgba(255,255,255,0.12)",
+              bgcolor: "rgba(103, 194, 58, 0.05)",
+              borderColor: "primary.main",
             }}
           >
             <Typography variant="h4" fontWeight={900} sx={{ mb: 1 }}>
@@ -1002,7 +705,7 @@ export default function NewStorePage({
         </Stack>
       </Container>
 
-      {/* Modal de confirmação */}
+      {/* Modais */}
       <Dialog open={open} onClose={handleFechar} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
         <DialogTitle sx={{ fontSize: 22, fontWeight: 800, textAlign: "center" }}>
           Confirme sua seleção
@@ -1068,7 +771,6 @@ export default function NewStorePage({
         </DialogActions>
       </Dialog>
 
-      {/* Modal PIX (QR) */}
       <PixModal
         open={pixOpen}
         onClose={() => {
@@ -1080,9 +782,7 @@ export default function NewStorePage({
         amount={pixAmount}
         onCopy={() => {
           if (pixData) {
-            navigator.clipboard.writeText(
-              pixData.copy_paste_code || pixData.qr_code || ""
-            );
+            navigator.clipboard.writeText(pixData.copy_paste_code || pixData.qr_code || "");
           }
         }}
         onRefresh={async () => {
@@ -1103,7 +803,6 @@ export default function NewStorePage({
         }}
       />
 
-      {/* Modal de sucesso do PIX */}
       <Dialog open={pixApproved} onClose={() => setPixApproved(false)} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
         <DialogTitle sx={{ fontSize: 22, fontWeight: 900, textAlign: "center" }}>
           Pagamento confirmado! 🎉
@@ -1123,7 +822,7 @@ export default function NewStorePage({
         </DialogActions>
       </Dialog>
 
-      {/* Modal: limite atingido */}
+      {/* Limite atingido */}
       <Dialog open={limitOpen} onClose={() => setLimitOpen(false)} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
         <DialogTitle sx={{ fontSize: 20, fontWeight: 900, textAlign: "center" }}>
           {limitInfo?.type === "selection"

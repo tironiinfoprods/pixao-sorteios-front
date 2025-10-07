@@ -3,7 +3,8 @@ import React from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 
 import { SelectionContext } from "./selectionContext";
-import NewStorePage from "./NewStorePage";
+import HomePage from "./HomePage";
+import NumbersPage from "./NumbersPage";
 import AccountPage from "./AccountPage";
 import LoginPage from "./LoginPage";
 import RegisterPage from "./RegisterPage";
@@ -21,6 +22,9 @@ import AdminUsersPage from "./AdminUsersPage";
 import DrawBoardPage from "./DrawBoardPage";
 import AdminOpenDrawBuyers from "./AdminOpenDrawBuyers";
 
+// ⬇️ NOVO: lista os e-books por seções (categorias)
+import Infoprodutos from "./Infoprodutos";
+
 export default function App() {
   const [selecionados, setSelecionados] = React.useState([]);
   const limparSelecao = React.useCallback(() => setSelecionados([]), []);
@@ -30,12 +34,32 @@ export default function App() {
       <SelectionContext.Provider value={{ selecionados, setSelecionados, limparSelecao }}>
         <BrowserRouter>
           <Routes>
-            {/* HOME só para não-admin */}
+            {/* HOME (não-admin) */}
             <Route
               path="/"
               element={
                 <NonAdminRoute>
-                  <NewStorePage />
+                  <HomePage />
+                </NonAdminRoute>
+              }
+            />
+
+            {/* NOVO: catálogo de e-books por categoria/ seção */}
+            <Route
+              path="/infoprodutos"
+              element={
+                <NonAdminRoute>
+                  <Infoprodutos />
+                </NonAdminRoute>
+              }
+            />
+
+            {/* TABELA DE NÚMEROS em tela separada (não-admin) */}
+            <Route
+              path="/numeros"
+              element={
+                <NonAdminRoute>
+                  <NumbersPage />
                 </NonAdminRoute>
               }
             />
