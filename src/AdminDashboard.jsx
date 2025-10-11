@@ -19,9 +19,25 @@ import {
   Toolbar,
   Typography,
   createTheme,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Select,
+  InputLabel,
+  FormControl,
+  Table,
+  TableHead,
+  TableRow,
+  TableCell,
+  TableBody,
+  Chip,
 } from "@mui/material";
 import ArrowBackIosNewRoundedIcon from "@mui/icons-material/ArrowBackIosNewRounded";
 import AccountCircleRoundedIcon from "@mui/icons-material/AccountCircleRounded";
+import EditRoundedIcon from "@mui/icons-material/EditRounded";
+import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
+import AddCircleRoundedIcon from "@mui/icons-material/AddCircleRounded";
 import logoNewStore from "./Logo-branca-sem-fundo-768x132.png";
 import { useAuth } from "./authContext";
 
@@ -151,6 +167,13 @@ export default function AdminDashboard() {
   const [saving, setSaving] = React.useState(false);
   const [creating, setCreating] = React.useState(false);
 
+  // ===== NOVO: dados para tabela de sorteios e mapeamento de infoprodutos =====
+  const [draws, setDraws] = React.useState([]);
+  const [loadingDraws, setLoadingDraws] = React.useState(true);
+  const [infoproducts, setInfoproducts] = React.useState([]);
+  const [ipByDraw, setIpByDraw] = React.useState({}); // draw_id -> {id,title,price_cents}
+
+  // ======= carregamento de resumo/topo =======
   const loadSummary = React.useCallback(async () => {
     setLoading(true);
     try {
@@ -207,6 +230,152 @@ export default function AdminDashboard() {
 
   React.useEffect(() => { loadSummary(); }, [loadSummary]);
 
+  // ======= NOVO: carrega infoprodutos e cria mapa draw_id -> infoproduto =======
+  const loadInfoproductsAndMap = React.useCallback(async () => {
+    try {
+      // pega MUITOS de uma vez (evita paginação pequena)
+      const listResp = await getJSON("/infoproducts?limit=200");
+      const items = Array.isArray(listResp?.items) ? listResp.items : (Array.isArray(listResp) ? listResp : []);
+      const ips = items.map(p => ({
+        id: p.id,
+        title: p.title || p.sku || `#${p.id}`,
+        price_cents: Number(p.price_cents ?? 0),
+      }));
+      setInfoproducts(ips);
+
+      // para mapear com segurança, buscamos os draws de cada infoproduto via GET /infoproducts/:id
+      const pairs = {};
+      for (const p of ips) {
+        try {
+          const det = await getJSON(`/infoproducts/${p.id}`);
+          const dlist = det?.draws || [];
+          for (const d of dlist) {
+            const did = d?.id;
+            if (did != null) {
+              pairs[String(did)] = {
+                id: p.id,
+                title: p.title,
+                // preço do sorteio vem do produto (price_cents) – coerente com seu backend
+                price_cents: p.price_cents,
+              };
+            }
+          }
+        } catch {}
+      }
+      setIpByDraw(pairs);
+    } catch (e) {
+      console.warn("[AdminDashboard] loadInfoproductsAndMap skipped:", e?.message || e);
+      setInfoproducts([]);
+      setIpByDraw({});
+    }
+  }, []);
+
+  // ======= carrega sorteios e funde com mapa de infoprodutos quando possível =======
+  const normalizeDraw = (d) => {
+    const ip = d?.infoproduct || d?.product || d?.ip || null;
+    const ipId =
+      d?.infoproduct_id ??
+      d?.product_id ??
+      d?.info_product_id ??
+      d?.infoproductid ??
+      d?.metadata?.infoproduct_id ??
+      ip?.id ??
+      null;
+
+    const ipTitle =
+      d?.infoproduct_title ??
+      d?.product_title ??
+      d?.metadata?.infoproduct_title ??
+      d?.infoproduct_sku ??
+      d?.sku ??
+      ip?.title ??
+      ip?.name ??
+      null;
+
+    const ipPrice =
+      d?.infoproduct_price_cents ??
+      d?.product_price_cents ??
+      d?.price_cents_from_infoproduct ??
+      d?.metadata?.price_cents ??
+      ip?.price_cents ??
+      ip?.amount_cents ??
+      ip?.price ??
+      null;
+
+    return {
+      id: d?.id ?? d?.draw_id ?? d?._id ?? null,
+      title: d?.title ?? d?.name ?? `Sorteio #${d?.id ?? d?.draw_id ?? "?"}`,
+      status: String(d?.status ?? d?.state ?? "open").toLowerCase(),
+      price_cents: Number(
+        d?.price_cents ??
+        d?.ticket_price_cents ??
+        d?.price ??
+        d?.ticket_price ??
+        0
+      ),
+      numbers_total: Number(d?.numbers_total ?? d?.total_numbers ?? d?.numbers_count ?? 100),
+      max_per_user: Number(
+        d?.max_per_user ??
+        d?.limit_per_user ??
+        d?.purchase_limit ??
+        d?.max_per_user_per_draw ??
+        1
+      ),
+      infoproduct_id: ipId,
+      ipTitle: ipTitle,
+      ipPriceCents: ipPrice != null ? Number(ipPrice) : null,
+    };
+  };
+
+  const annotateFromMap = (d, map) => {
+    const m = map[String(d.id)];
+    if (!m) return d;
+    return {
+      ...d,
+      infoproduct_id: d.infoproduct_id ?? m.id ?? null,
+      ipTitle: d.ipTitle ?? m.title ?? null,
+      ipPriceCents: d.ipPriceCents ?? m.price_cents ?? null,
+    };
+  };
+
+  const loadDraws = React.useCallback(async () => {
+    setLoadingDraws(true);
+    try {
+      let list = [];
+      try {
+        const r = await getJSON("/admin/draws");
+        list = Array.isArray(r) ? r : r?.draws || r?.items || [];
+      } catch {
+        const r = await getJSON("/draws");
+        list = Array.isArray(r) ? r : r?.draws || r?.items || [];
+      }
+      const base = list.map(normalizeDraw);
+      // aplica mapeamento conhecido (se já carregado)
+      const merged = base.map(d => annotateFromMap(d, ipByDraw));
+      setDraws(merged);
+    } catch (e) {
+      console.error("[AdminDashboard] load draws failed:", e?.message || e);
+      setDraws([]);
+    } finally {
+      setLoadingDraws(false);
+    }
+  }, [ipByDraw]);
+
+  React.useEffect(() => {
+    // primeiro carrega infoprodutos + mapa; depois sorteios
+    (async () => {
+      await loadInfoproductsAndMap();
+      await loadDraws();
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // quando o mapa for atualizado depois, reanotar a lista atual
+  React.useEffect(() => {
+    if (!draws.length) return;
+    setDraws(prev => prev.map(d => annotateFromMap(d, ipByDraw)));
+  }, [ipByDraw]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // SALVAR: mantém o fluxo do preço que já funciona e tenta salvar os novos campos
   const onSaveAll = async () => {
     setSaving(true);
@@ -243,10 +412,100 @@ export default function AdminDashboard() {
       setCreating(true);
       await postJSON("/admin/dashboard/new", {});
       await loadSummary();
+      await loadDraws();
     } catch (e) {
       console.error("[AdminDashboard] POST /new failed:", e);
     } finally {
       setCreating(false);
+    }
+  };
+
+  // ===== CRUD local dos sorteios (edição rápida) =====
+  const [editOpen, setEditOpen] = React.useState(false);
+  const [editing, setEditing] = React.useState({
+    id: null,
+    title: "",
+    status: "open",
+    price_cents: 0,
+    numbers_total: 100,
+    max_per_user: 1,
+    infoproduct_id: null,
+  });
+  const openNew = () => {
+    setEditing({
+      id: null,
+      title: "",
+      status: "open",
+      price_cents: 0,
+      numbers_total: 100,
+      max_per_user: 1,
+      infoproduct_id: null,
+    });
+    setEditOpen(true);
+  };
+  const openEdit = (d) => {
+    let ipId = d.infoproduct_id;
+    if (!ipId && d.ipTitle) {
+      const found = infoproducts.find((p) => String(p.title).toLowerCase() === String(d.ipTitle).toLowerCase());
+      if (found) ipId = found.id;
+    }
+    setEditing({ ...d, infoproduct_id: ipId || null });
+    setEditOpen(true);
+  };
+  const closeEdit = () => setEditOpen(false);
+
+  const saveEditing = async () => {
+    const payload = {
+      title: editing.title,
+      name: editing.title,
+      status: editing.status,
+      price_cents: Math.max(0, Math.floor(Number(editing.price_cents || 0))),
+      ticket_price_cents: Math.max(0, Math.floor(Number(editing.price_cents || 0))),
+      numbers_total: Math.max(1, Math.floor(Number(editing.numbers_total || 100))),
+      total_numbers: Math.max(1, Math.floor(Number(editing.numbers_total || 100))),
+      max_per_user: Math.max(0, Math.floor(Number(editing.max_per_user || 0))),
+      limit_per_user: Math.max(0, Math.floor(Number(editing.max_per_user || 0))),
+      infoproduct_id: editing.infoproduct_id || null,
+    };
+
+    try {
+      if (editing.id) {
+        try { await postJSON(`/admin/draws/${editing.id}`, payload, "PUT"); }
+        catch { await postJSON(`/draws/${editing.id}`, payload, "PUT"); }
+      } else {
+        try { await postJSON("/admin/draws", payload, "POST"); }
+        catch { await postJSON("/draws", payload, "POST"); }
+      }
+      closeEdit();
+      await loadDraws();
+    } catch (e) {
+      console.error("[AdminDashboard] save draw failed:", e?.message || e);
+      alert("Falha ao salvar o sorteio.");
+    }
+  };
+
+  const deleteDraw = async (id) => {
+    if (!window.confirm("Deseja realmente excluir este sorteio?")) return;
+    try {
+      try { await postJSON(`/admin/draws/${id}`, null, "DELETE"); }
+      catch { await postJSON(`/draws/${id}`, null, "DELETE"); }
+      await loadDraws();
+    } catch (e) {
+      console.error("[AdminDashboard] delete draw failed:", e?.message || e);
+      alert("Não foi possível excluir.");
+    }
+  };
+
+  const toggleStatus = async (d) => {
+    const newStatus = d.status === "open" ? "closed" : "open";
+    try {
+      const body = { status: newStatus };
+      try { await postJSON(`/admin/draws/${d.id}`, body, "PATCH"); }
+      catch { await postJSON(`/draws/${d.id}`, body, "PATCH"); }
+      await loadDraws();
+    } catch (e) {
+      console.error("[AdminDashboard] toggle status failed:", e?.message || e);
+      alert("Não foi possível alterar o status.");
     }
   };
 
@@ -257,6 +516,8 @@ export default function AdminDashboard() {
   const closeMenu = () => setMenuEl(null);
   const goPainel = () => { closeMenu(); navigate("/admin"); };
   const doLogout = () => { closeMenu(); logout(); navigate("/"); };
+
+  const configPriceCents = Math.max(0, Math.floor(Number(price || 0)));
 
   return (
     <ThemeProvider theme={theme}>
@@ -386,6 +647,104 @@ export default function AdminDashboard() {
             </Button>
           </Paper>
 
+          {/* === CRUD DE SORTEIOS (com Infoproduto) === */}
+          <Paper variant="outlined" sx={{ p: { xs: 3, md: 4 }, borderRadius: 4, width: "100%" }}>
+            <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
+              <Typography variant="h6" sx={{ fontWeight: 900 }}>
+                Gerenciar Sorteios
+              </Typography>
+              <Button
+                startIcon={<AddCircleRoundedIcon />}
+                variant="contained"
+                color="primary"
+                onClick={openNew}
+                sx={{ borderRadius: 999 }}
+              >
+                Novo
+              </Button>
+            </Stack>
+
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>ID</TableCell>
+                  <TableCell>Título</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell align="right">Preço (¢)</TableCell>
+                  <TableCell align="right">Qtde números</TableCell>
+                  <TableCell align="right">Máx/Usuário</TableCell>
+                  <TableCell>Infoproduto</TableCell>
+                  <TableCell align="right">Ações</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {loadingDraws ? (
+                  <TableRow>
+                    <TableCell colSpan={8} sx={{ opacity: 0.7 }}>
+                      Carregando…
+                    </TableCell>
+                  </TableRow>
+                ) : draws.length ? (
+                  draws.map((d) => {
+                    const ipById = d.infoproduct_id
+                      ? infoproducts.find((p) => String(p.id) === String(d.infoproduct_id))
+                      : null;
+
+                    const priceFromTitle = (!ipById && d.ipTitle)
+                      ? (infoproducts.find((p) => String(p.title).toLowerCase() === String(d.ipTitle).toLowerCase())?.price_cents ?? null)
+                      : null;
+
+                    const displayPrice =
+                      (d.price_cents && d.price_cents > 0 ? d.price_cents : null) ??
+                      (ipById?.price_cents ?? null) ??
+                      (priceFromTitle ?? null) ??
+                      (d.ipPriceCents ?? null) ??
+                      Math.max(0, Math.floor(Number(price || 0)));
+
+                    const displayIpTitle =
+                      ipById?.title ??
+                      d.ipTitle ??
+                      (d.infoproduct_id ? `#${d.infoproduct_id}` : "—");
+
+                    return (
+                      <TableRow key={d.id}>
+                        <TableCell>{d.id}</TableCell>
+                        <TableCell>{d.title}</TableCell>
+                        <TableCell>
+                          <Chip
+                            size="small"
+                            label={d.status}
+                            color={d.status === "open" ? "success" : "default"}
+                            onClick={() => toggleStatus(d)}
+                            sx={{ cursor: "pointer" }}
+                          />
+                        </TableCell>
+                        <TableCell align="right">{displayPrice || 0}</TableCell>
+                        <TableCell align="right">{d.numbers_total}</TableCell>
+                        <TableCell align="right">{d.max_per_user}</TableCell>
+                        <TableCell>{displayIpTitle}</TableCell>
+                        <TableCell align="right">
+                          <IconButton size="small" onClick={() => openEdit(d)} title="Editar">
+                            <EditRoundedIcon fontSize="small" />
+                          </IconButton>
+                          <IconButton size="small" onClick={() => deleteDraw(d.id)} title="Excluir">
+                            <DeleteOutlineRoundedIcon fontSize="small" />
+                          </IconButton>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={8} sx={{ opacity: 0.7 }}>
+                      Nenhum sorteio cadastrado.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </Paper>
+
           {/* As 3 listas */}
           <Stack  spacing={3} sx={{ width: "100%" }}>
              <BigCard color="green"  onClick={() => navigate("/admin/AdminClientesUser")}>
@@ -393,7 +752,7 @@ export default function AdminDashboard() {
               <br /> CLIENTES
             </BigCard>
 
-            <BigCard color="blue"  onClick={() => navigate("/admin/AdminClientesUser")}>
+            <BigCard color="blue"  onClick={() => navigate("/admin/infoproducts")}>
               CADASTRO INFOPRODUTOS
               <br /> 
             </BigCard>
@@ -427,6 +786,86 @@ export default function AdminDashboard() {
           </Stack>
         </Stack>
       </Container>
+
+      {/* Modal de edição/criação */}
+      <Dialog open={creating || editOpen} onClose={() => { setCreating(false); setEditOpen(false); }} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 900 }}>
+          {editing?.id ? "Editar sorteio" : "Novo sorteio"}
+        </DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField
+              label="Título"
+              value={editing.title}
+              onChange={(e) => setEditing((s) => ({ ...s, title: e.target.value }))}
+              fullWidth
+            />
+            <FormControl fullWidth>
+              <InputLabel>Status</InputLabel>
+              <Select
+                label="Status"
+                value={editing.status}
+                onChange={(e) => setEditing((s) => ({ ...s, status: e.target.value }))}
+              >
+                <MenuItem value="open">open</MenuItem>
+                <MenuItem value="closed">closed</MenuItem>
+              </Select>
+            </FormControl>
+
+            <TextField
+              label="Preço (centavos)"
+              value={editing.price_cents}
+              onChange={(e) => setEditing((s) => ({ ...s, price_cents: e.target.value }))}
+              inputProps={{ inputMode: "numeric", pattern: "[0-9]*" }}
+              helperText="Se selecionar um infoproduto, o preço virá dele."
+            />
+            <TextField
+              label="Quantidade de números"
+              value={editing.numbers_total}
+              onChange={(e) => setEditing((s) => ({ ...s, numbers_total: e.target.value }))}
+              type="number"
+              inputProps={{ min: 1, max: 1000 }}
+            />
+            <TextField
+              label="Limite por usuário"
+              value={editing.max_per_user}
+              onChange={(e) => setEditing((s) => ({ ...s, max_per_user: e.target.value }))}
+              type="number"
+              inputProps={{ min: 0 }}
+              helperText="0 = sem limite"
+            />
+            <FormControl fullWidth>
+              <InputLabel>Infoproduto (opcional)</InputLabel>
+              <Select
+                label="Infoproduto (opcional)"
+                value={editing.infoproduct_id ?? ""}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  const pick = infoproducts.find((p) => String(p.id) === String(val));
+                  setEditing((s) => ({
+                    ...s,
+                    infoproduct_id: val || null,
+                    price_cents: pick?.price_cents ?? s.price_cents,
+                  }));
+                }}
+              >
+                <MenuItem value="">—</MenuItem>
+                {infoproducts.map((p) => (
+                  <MenuItem key={p.id} value={p.id}>
+                    {p.title} (#{p.id}) — {p.price_cents}¢
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => { setCreating(false); setEditOpen(false); }} variant="outlined">Cancelar</Button>
+          <Button onClick={saveEditing} variant="contained" color="primary">
+            Salvar
+          </Button>
+        </DialogActions>
+      </Dialog>
     </ThemeProvider>
   );
 }

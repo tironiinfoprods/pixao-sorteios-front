@@ -115,13 +115,12 @@ function normalizeToEntries(payPayload, reservationsPayload) {
     const list = reservationsPayload.reservations || reservationsPayload.items || [];
     return list.map(r => {
       const raw = String(r.status || "").toLowerCase();
-      // mapear corretamente os estados do reservations
       let st = "pending";
       if (raw === "paid" || raw === "sold" || raw === "approved") st = "approved";
       else if (/(active|reserved|pending|await|aguard)/.test(raw)) st = "pending";
       else if (/(expired|cancel)/.test(raw)) st = "expired";
       return {
-        reservation_id: r.id ?? r.reservation_id ?? null,
+        reservation_id: r.id ?? r.reservation_id ?? r.reservationId ?? null,
         draw_id: r.draw_id ?? r.sorteio_id ?? null,
         number: Number(r.n ?? r.number ?? r.numero),
         status: st,
@@ -158,18 +157,95 @@ function asTime(v) {
 }
 
 // ⚠️ Incremento de cupom: usar apenas endpoints de sync/incremento.
-// Nada de fallback para rotas "update" (elas fazem SET e causam sobrescrita).
 async function postIncrementCoupon({ addCents, lastPaymentSyncAt }) {
   const payload = {
     add_cents: Number(addCents) || 0,
     last_payment_sync_at: lastPaymentSyncAt,
   };
-  // Somente os endpoints de incremento
   return await tryManyPost(
     ["/coupons/sync", "/me/coupons/sync"],
     payload
   );
 }
+
+/* ---------- remaining por sorteio (para criar linhas extras) ---------- */
+async function getRemainingForDraw(drawId) {
+  const r = await fetch(apiJoin(`/vouchers/remaining?draw_id=${Number(drawId)}`), {
+    headers: { ...authHeaders() },
+    credentials: "include",
+    cache: "no-store",
+  });
+  if (!r.ok) return 0;
+  try {
+    const j = await r.json();
+    const n = Number(j?.remaining ?? j?.count ?? j?.available ?? j?.left);
+    return Number.isFinite(n) ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/* ================== Resolver link do e-book ================== */
+// Deriva URL do e-book diretamente do objeto do sorteio (sem bater em rotas admin)
+function deriveEbookFromDrawObj(d) {
+  if (!d) return null;
+  const title = d?.title || d?.name || "E-book";
+  const direct =
+    d?.ebook_url || d?.download_url || d?.file_url ||
+    d?.ebook?.url || d?.file?.url || d?.links?.download;
+  if (direct) return { title, url: apiJoin(direct) };
+  const sku = d?.sku || d?.infoproduct?.sku || d?.product?.sku;
+  if (sku) return { title, url: apiJoin(`/ebooks/${encodeURIComponent(sku)}/download`) };
+  return null;
+}
+
+const ebookCache = {};
+async function resolveEbookForDraw(drawId) {
+  if (!Number.isFinite(Number(drawId))) return null;
+  if (ebookCache[drawId] !== undefined) return ebookCache[drawId];
+
+  // 1) NOVO: pergunta direto para o backend qual é o link autorizado
+  try {
+    const j = await fetchJsonLoose(`/ebooks/by-draw/${drawId}`, {
+      headers: { ...authHeaders() },
+      credentials: "include",
+      cache: "no-store",
+    });
+    if (j?.url) {
+      const out = { title: j.title || "E-book", url: j.url };
+      ebookCache[drawId] = out;
+      return out;
+    }
+  } catch {}
+
+  // 2) Fallback antigo: tentar extrair de /draws/:id (caso você passe a expor sku/ebook_url lá)
+  const draw =
+    await fetchJsonLoose(`/draws/${drawId}`) ||
+    await fetchJsonLoose(`/api/draws/${drawId}`) ||
+    await fetchJsonLoose(`/draw/${drawId}`);
+
+  if (draw) {
+    const title = draw?.title || draw?.name || "E-book";
+    const direct =
+      draw?.ebook_url || draw?.download_url || draw?.file_url ||
+      draw?.ebook?.url || draw?.file?.url || draw?.links?.download;
+    if (direct) {
+      const out = { title, url: direct };
+      ebookCache[drawId] = out;
+      return out;
+    }
+    const sku = draw?.sku || draw?.infoproduct?.sku || draw?.product?.sku;
+    if (sku) {
+      const out = { title, url: `/api/ebooks/${encodeURIComponent(sku)}/download` };
+      ebookCache[drawId] = out;
+      return out;
+    }
+  }
+
+  ebookCache[drawId] = null;
+  return null;
+}
+/* ============================================================ */
 
 export default function AccountPage() {
   const navigate = useNavigate();
@@ -181,17 +257,13 @@ export default function AccountPage() {
   const [user, setUser] = React.useState(ctxUser || null);
   const [rows, setRows] = React.useState([]);
 
-  // ► saldo composto
-  const [baseCents, setBaseCents] = React.useState(0);   // pode incluir safeUi p/ nunca regredir visualmente
-  const [paidCents, setPaidCents] = React.useState(0);   // soma payments approved (não usado na UI)
-
-  // Valor oficial vindo do servidor (coupon_value_cents)
+  // ► saldo (mantido internamente)
+  const [baseCents, setBaseCents] = React.useState(0);
+  const [paidCents, setPaidCents] = React.useState(0);
   const [officialCents, setOfficialCents] = React.useState(0);
-  const valorAcumulado = (Number(officialCents) || 0) / 100;
 
   const [cupom, setCupom] = React.useState("CUPOMAQUI");
   const [validade, setValidade] = React.useState("--/--/--");
-  const [syncing, setSyncing] = React.useState(false);
 
   // estado das configurações (apenas admin)
   const [cfgLoading, setCfgLoading] = React.useState(false);
@@ -222,38 +294,7 @@ export default function AccountPage() {
   }
   React.useEffect(() => { loadClaims(); }, []);
 
-  // Busca uma reserva ativa do usuário para (drawId, number)
-  async function findExistingReservation(drawId, number) {
-    const endpoints = [
-      "/me/reservations?active=1",
-      "/me/reservations",
-      "/reservations/me?active=1",
-      "/reservations/me",
-    ];
-    for (const base of endpoints) {
-      const url = `${base}${base.includes("?") ? "&" : "?"}_=${Date.now()}`;
-      try {
-        const r = await fetch(apiJoin(url), {
-          headers: { "Content-Type": "application/json", ...authHeaders() },
-          credentials: "include",
-          cache: "no-store",
-        });
-        if (!r.ok) continue;
-        const j = await r.json().catch(() => ({}));
-        const list = Array.isArray(j) ? j : (j.reservations || j.items || []);
-        const hit = (list || []).find(x => {
-          const d = Number(x?.draw_id ?? x?.sorteio_id);
-          const ns = Array.isArray(x?.numbers) ? x.numbers.map(n => Number(n)) : [];
-          const nSingle = Number(x?.n ?? x?.number ?? x?.numero);
-          return d === Number(drawId) && (ns.includes(Number(number)) || nSingle === Number(number));
-        });
-        if (hit) return hit.id ?? hit.reservation_id ?? hit.reservationId ?? null;
-      } catch {}
-    }
-    return null;
-  }
-
-  // NOVO: busca a ÚLTIMA reserva ATIVA do sorteio, priorizando os números informados
+  // Busca a ÚLTIMA reserva ATIVA do sorteio, priorizando números informados
   async function findLatestActiveReservation(drawId, numbersHint) {
     const want = new Set(
       Array.isArray(numbersHint)
@@ -306,7 +347,7 @@ export default function AccountPage() {
           }
         }
       } catch {}
-      if (best) break; // já achou uma ativa recente neste endpoint
+      if (best) break;
     }
 
     return best ? { reservationId: best.id, number: best.number } : null;
@@ -344,7 +385,6 @@ export default function AccountPage() {
     try {
       const drawId = Number(row?.draw_id ?? row?.sorteio ?? row?.draw ?? row?.id);
 
-      // ► Prioriza a ÚLTIMA reserva ATIVA dentro dos números exibidos na linha
       const hintNumbers = Array.isArray(row?.numeros)
         ? row.numeros
         : (Number.isFinite(Number(row?.number ?? row?.numero ?? row?.num))
@@ -359,7 +399,6 @@ export default function AccountPage() {
 
       let selectedNumber = Number(latest.number);
 
-      // Reaproveita pagamento pendente existente (para o número correto)
       const already = await findPendingPayment(drawId, selectedNumber);
       if (already && (already.qr_code || already.qr_code_base64 || already.copy || already.copy_paste)) {
         setPixData(already);
@@ -369,7 +408,6 @@ export default function AccountPage() {
         return;
       }
 
-      // Função local para pedir PIX (com revalidação caso a reserva esteja inativa)
       const requestPix = async (reservationId) => {
         const r = await fetch(apiJoin("/payments/pix"), {
           method: "POST",
@@ -379,14 +417,13 @@ export default function AccountPage() {
           body: JSON.stringify({ reservationId, reservation_id: reservationId }),
         });
 
-        // Se a API disser que a reserva não está ativa, tenta novamente com a última ativa
         if (!r.ok && r.status === 400) {
           let msg = "";
           try { const j = await r.json(); msg = String(j?.error || j?.message || ""); } catch {}
           if (/reservation[_\s-]?not[_\s-]?active|expired|inativa|expirada/i.test(msg)) {
             const fresh = await findLatestActiveReservation(drawId, hintNumbers);
             if (fresh && fresh.reservationId !== reservationId) {
-              selectedNumber = Number(fresh.number); // atualiza o nº
+              selectedNumber = Number(fresh.number);
               return await requestPix(fresh.reservationId);
             }
             setPixMsg("Falha ao gerar PIX: sua reserva não está ativa. Volte ao sorteio para reservar novamente.");
@@ -406,7 +443,6 @@ export default function AccountPage() {
 
       setPixData(created);
 
-      // Descobre o valor (centavos)
       let amountCents =
         (typeof created?.amount_cents === "number" && created.amount_cents) ||
         (typeof created?.payment?.amount_cents === "number" && created.payment.amount_cents) ||
@@ -462,10 +498,9 @@ export default function AccountPage() {
     try { return JSON.parse(localStorage.getItem("me") || "null"); } catch { return null; }
   }, []);
 
-  // ---- RELOAD BALANCES (composição base + compras aprovadas) ----
+  // ---- RELOAD BALANCES (mantido para consistência do cupom) ----
   const reloadBalances = React.useCallback(async () => {
     try {
-      // 1) Cupom atual (valor oficial do servidor)
       const mine = await fetchJsonLoose("/coupons/mine", {
         headers: { ...authHeaders() }, credentials: "include",
       });
@@ -478,13 +513,11 @@ export default function AccountPage() {
         code = mine.code || mine.coupon_code || null;
       }
 
-      // atualiza o valor OFICIAL exibido
       setOfficialCents(Number.isFinite(currentCents) && currentCents >= 0 ? currentCents : 0);
 
       if (Number.isFinite(currentCents) && currentCents >= 0) setBaseCents(currentCents);
       if (code) setCupom(String(code));
 
-      // carimbo de sincronização
       let lastSyncMs =
         asTime(mine?.last_payment_sync_at) ||
         asTime(mine?.coupon_updated_at) ||
@@ -496,7 +529,6 @@ export default function AccountPage() {
         lastSyncMs = Number(localStorage.getItem(lsKey) || 0) || 0;
       }
 
-      // 2) Delta de pagamentos aprovados após o carimbo
       let deltaCents = 0;
       try {
         const r = await fetch(apiJoin("/payments/me?_=" + Date.now()), {
@@ -517,7 +549,6 @@ export default function AccountPage() {
         }
       } catch {}
 
-      // 3) Incremento no backend (sem sobrescrever total) e REFRESH do valor oficial
       if (deltaCents > 0) {
         const nowIso = new Date().toISOString();
         try {
@@ -525,29 +556,22 @@ export default function AccountPage() {
             addCents: deltaCents,
             lastPaymentSyncAt: nowIso,
           });
-          // Recarrega o valor oficial após sincronizar
           const updated = await fetchJsonLoose("/coupons/mine", {
             headers: { ...authHeaders() }, credentials: "include",
           });
           const centsAfter = Number(updated?.cents ?? updated?.coupon_value_cents ?? updated?.value_cents ?? currentCents) || currentCents;
 
-          // valor oficial pós-sync
           setOfficialCents(centsAfter);
-
-          // Nunca diminuir na UI por conta de replicação/latência (safeUi só para base interna)
           const safeUi = Math.max(centsAfter, currentCents + deltaCents);
           setBaseCents(safeUi);
 
-          if (lsKey) localStorage.setItem(lsKey, String(Date.parse(nowIso)));
-        } catch (e) {
-          console.warn("[coupon.increment] falhou ao persistir incremento:", e?.message || e);
-        }
+          const uid2 = (mine?.id || ctxUser?.id || "").toString();
+          if (uid2) localStorage.setItem(`ns_coupon_last_sync_${uid2}`, String(Date.parse(nowIso)));
+        } catch {}
       }
 
-      setPaidCents(0); // não somar pagamentos diretamente na UI
-    } catch (e) {
-      console.warn("[reloadBalances] erro silencioso:", e?.message || e);
-    }
+      setPaidCents(0);
+    } catch {}
   }, [ctxUser?.id]);
 
   // efeito principal
@@ -555,7 +579,6 @@ export default function AccountPage() {
     let alive = true;
     (async () => {
       try {
-        // /me
         let me = ctxUser || storedMe || null;
         try {
           const meResp = await getJSON("/me");
@@ -564,10 +587,8 @@ export default function AccountPage() {
         if (alive) {
           setUser(me || null);
           try { if (me) localStorage.setItem("me", JSON.stringify(me)); } catch {}
-          // NÃO atualizar baseCents a partir de /me para não sobrescrever o saldo
         }
 
-        // pagamentos/linhas p/ tabela + validade
         const { data: pay, from } = await tryManyJson([
           "/payments/me",
           "/me/reservations?active=1",
@@ -576,12 +597,24 @@ export default function AccountPage() {
           "/reservations/me",
         ]);
 
-        // draws (status)
         let drawsMap = new Map();
+
+        // *** AQUI já lemos /draws e extraímos TAMBÉM o link do e-book por sorteio ***
         try {
           const draws = await getJSON("/draws");
           const arr = Array.isArray(draws) ? draws : (draws.draws || draws.items || []);
           drawsMap = new Map(arr.map(d => [Number(d.id ?? d.draw_id), (d.status ?? d.result ?? "")]));
+
+          // Pré-popula os links de e-book para cada sorteio, se possível
+          const initialEbooks = {};
+          for (const d of arr) {
+            const id = Number(d.id ?? d.draw_id);
+            const info = deriveEbookFromDrawObj(d);
+            if (Number.isFinite(id) && info) initialEbooks[id] = info;
+          }
+          if (Object.keys(initialEbooks).length) {
+            setEbookByDraw(prev => ({ ...initialEbooks, ...prev }));
+          }
         } catch {}
 
         if (alive && pay) {
@@ -607,13 +640,12 @@ export default function AccountPage() {
             return true;
           });
 
-          // DEDUPE por (sorteio, número) preferindo status aprovado
           const byKey = new Map();
           const priority = (st) => {
             const s = String(st || "").toLowerCase();
             if (["approved","paid","pago"].includes(s)) return 2;
             if (/(expired|cancel)/.test(s)) return 0;
-            return 1; // pending/active/await…
+            return 1;
           };
           for (const e of filtered) {
             const key = `${Number(e.draw_id)}|${Number(e.number)}`;
@@ -629,7 +661,6 @@ export default function AccountPage() {
           }
           const deduped = Array.from(byKey.values());
 
-          // AGRUPAR por sorteio (approved só se todos aprovados)
           const byDraw = new Map();
           const isPendingStatus = (s) => /pending|pendente|await|aguard|active|ativo|reserv/.test(String(s || "").toLowerCase());
           const isApprovedStatus = (s) => /^(approved|paid|pago)$/.test(String(s || "").toLowerCase());
@@ -661,16 +692,52 @@ export default function AccountPage() {
               numeros: Array.from(new Set(g.numeros)).sort((a,b)=>a-b),
               dia: whenDate ? whenDate.toLocaleDateString("pt-BR") : "--/--/----",
               pagamento,
-              resultado: drawsMap.get(Number(g.draw_id)) || "aberto",
+              resultado: (drawsMap.get(Number(g.draw_id)) || "aberto"),
               whenMs: g.when || 0,
             };
           });
 
-          // >>> ORDEM: última compra primeiro (decrescente por whenMs)
           grouped.sort((a, b) => (b.whenMs || 0) - (a.whenMs || 0));
-          setRows(grouped);
 
-          // validade (último approved)
+          let drawsArr = [];
+          try {
+            const draws = await getJSON("/draws");
+            drawsArr = Array.isArray(draws) ? draws : (draws.draws || draws.items || []);
+          } catch {}
+
+          const groupedKeys = new Set(grouped.map(g => `${Number(g.draw_id)}`));
+          const extraRows = [];
+
+          if (Array.isArray(drawsArr) && drawsArr.length) {
+            const openDraws = drawsArr.filter(d =>
+              /(open|aberto)/i.test(String(d?.status ?? d?.result ?? ""))
+            );
+
+            const checks = await Promise.all(openDraws.map(async d => {
+              const id = Number(d.id ?? d.draw_id);
+              const rem = await getRemainingForDraw(id);
+              return { id, rem, status: String(d?.status ?? d?.result ?? "") };
+            }));
+
+            for (const c of checks) {
+              if (c.rem > 0 && !groupedKeys.has(String(c.id))) {
+                extraRows.push({
+                  draw_id: c.id,
+                  sorteio: String(c.id),
+                  numeros: [],
+                  dia: new Date().toLocaleDateString("pt-BR"),
+                  pagamento: "pending",
+                  resultado: c.status || "aberto",
+                  whenMs: Date.now(),
+                });
+              }
+            }
+          }
+
+          const finalRows = [...grouped, ...extraRows].sort((a, b) => (b.whenMs || 0) - (a.whenMs || 0));
+          setRows(finalRows);
+
+          // validade (mantida internamente)
           let lastApprovedAtMs = null;
           const listForValidity = from === "/payments/me"
             ? (Array.isArray(pay) ? pay : (pay.payments || []))
@@ -728,10 +795,108 @@ export default function AccountPage() {
     return () => { alive = false; };
   }, []);
 
+  /* ==================== vouchers restantes + e-book por sorteio ==================== */
+  const [remainingByDraw, setRemainingByDraw] = React.useState({});
+  const [ebookByDraw, setEbookByDraw] = React.useState({});
+
+  function parseRemainingFlexible(j) {
+    if (j == null) return 0;
+    if (typeof j === "number") return j;
+    if (typeof j === "string") return Number(j) || 0;
+    const candidates = [
+      j.remaining, j.count, j.available, j.free, j.left,
+      j.vouchers_remaining, j.vouchersLeft, j.remain, j.saldo,
+      j?.data?.remaining, j?.data?.count, j?.data?.available,
+      j?.result?.remaining, j?.result?.available,
+    ];
+    for (const c of candidates) {
+      const n = Number(c);
+      if (Number.isFinite(n) && n >= 0) return n;
+    }
+    if (Array.isArray(j.numbers)) {
+      try {
+        const avail = j.numbers.filter(x => {
+          const s = String(x?.status || x?.state || "").toLowerCase();
+          return s === "available" || s === "livre" || s === "open" || !s;
+        }).length;
+        if (avail > 0) return avail;
+      } catch {}
+    }
+    const total = Number(j.total ?? j.size);
+    const sold  = Number(j.sold ?? j.reserved ?? j.taken);
+    if (Number.isFinite(total) && total >= 0) {
+      if (Number.isFinite(sold) && sold >= 0) return Math.max(total - sold, 0);
+      return total;
+    }
+    return 0;
+  }
+
+  const reloadRemaining = React.useCallback(async () => {
+    try {
+      const ids = Array.from(new Set((rows || []).map(r => Number(r.draw_id)).filter(Number.isFinite)));
+    if (!ids.length) return;
+
+      const perId = await Promise.all(ids.map(async (id) => {
+        const paths = [
+          `/vouchers/remaining?draw_id=${id}`,
+          `/remaining?draw_id=${id}`,
+          `/numbers/remaining?draw_id=${id}`,
+          `/draws/${id}/remaining`,
+        ];
+        for (const p of paths) {
+          try {
+            const j = await getJSON(p);
+            return [id, parseRemainingFlexible(j)];
+          } catch {}
+        }
+        return [id, 0];
+      }));
+
+      const map = {};
+      for (const [id, n] of perId) map[id] = n;
+      setRemainingByDraw(map);
+    } catch {}
+  }, [rows]);
+
+  React.useEffect(() => { reloadRemaining(); }, [reloadRemaining]);
+
+  // Prefetch dos links de e-book para linhas pagas (preenche faltantes)
+  React.useEffect(() => {
+    let alive = true;
+    (async () => {
+      const paidRows = (rows || []).filter(r =>
+        /^(approved|paid|pago)$/i.test(String(r?.pagamento || ''))
+      );
+      for (const r of paidRows) {
+        const id = Number(r?.draw_id ?? r?.sorteio);
+        if (!Number.isFinite(id)) continue;
+        if (ebookByDraw[id]) continue; // já temos pelo /draws
+        const info = await resolveEbookForDraw(id);
+        if (alive && info) {
+          setEbookByDraw(prev => ({ ...prev, [id]: info }));
+        }
+      }
+    })();
+    return () => { alive = false; };
+  }, [rows, ebookByDraw]);
+
+  const canChoose = (row) => {
+    const drawId = Number(row?.draw_id ?? row?.sorteio);
+    const open = /(open|aberto)/i.test(String(row?.resultado || ""));
+    const rem = Number(remainingByDraw[drawId] || 0);
+    return open && rem > 0;
+  };
+
+  const handleChooseNumbers = (row) => {
+    const drawId = Number(row?.draw_id ?? row?.sorteio);
+    if (!Number.isFinite(drawId)) return;
+    navigate("/numeros", { state: { drawId } });
+  };
+  /* ============================================================================ */
+
   const u = user || {};
   const headingName =
     u.name || u.fullName || u.nome || u.displayName || u.username || u.email || "NOME DO CLIENTE";
-  const couponCode = u?.coupon_code || cupom || "CUPOMAQUI";
   const isAdminUser = !!(u?.is_admin || u?.role === "admin" || (u?.email && u.email.toLowerCase() === ADMIN_EMAIL));
 
   // salvar config
@@ -799,14 +964,20 @@ export default function AccountPage() {
 
       <Container maxWidth="lg" sx={{ py: { xs: 2.5, md: 5 } }}>
         <Stack spacing={2.5}>
-          <Typography
-            sx={{
-              fontWeight: 900, letterSpacing: 0.5, textTransform: "uppercase", opacity: 0.9,
-              textAlign: { xs: "center", md: "left" }, fontSize: { xs: 18, sm: 20, md: 22 }, lineHeight: 1.2, wordBreak: "break-word",
-            }}
-          >
-            {headingName}
-          </Typography>
+
+          {/* DADOS CADASTRAIS */}
+          <Paper variant="outlined" sx={{ p: { xs: 2, md: 3 } }}>
+            <Typography variant="h6" fontWeight={900} sx={{ mb: 2 }}>
+              Dados cadastrais
+            </Typography>
+
+            <Stack spacing={1.2}>
+              <Typography><strong>Nome:</strong> {u?.name || u?.fullName || u?.nome || "—"}</Typography>
+              <Typography><strong>E-mail:</strong> {u?.email || "—"}</Typography>
+              <Typography><strong>Telefone:</strong> {u?.phone || u?.telefone || "—"}</Typography>
+              <Typography><strong>CPF:</strong> {u?.cpf || u?.document || u?.document_number || "—"}</Typography>
+            </Stack>
+          </Paper>
 
           {/* Configurações do sorteio (apenas admin) */}
           {isAdminUser && (
@@ -854,185 +1025,6 @@ export default function AccountPage() {
             </Paper>
           )}
 
-          {/* Cartão */}
-          <Box sx={{ width: "100%", display: "flex", justifyContent: "center" }}>
-            <Paper
-              elevation={0}
-              sx={{
-                width: { xs: "min(86vw, 520px)", md: 700 },
-                aspectRatio: { xs: "16/9", md: "21/9" },
-                borderRadius: 6, position: "relative", overflow: "hidden",
-                p: { xs: 1.6, md: 2.2 },
-                bgcolor: "#0C0C0C",
-                border: "1px solid rgba(255,255,255,0.08)",
-                backgroundImage: `
-                  radial-gradient(160% 140% at 10% 10%, rgba(255,255,255,0.08), transparent 60%),
-                  radial-gradient(120% 140% at 80% 80%, rgba(255,255,255,0.06), transparent 55%),
-                  radial-gradient(100% 100% at 50% 50%, rgba(255,255,255,0.02), transparent 70%)
-                `,
-                backgroundBlendMode: "screen, lighten",
-              }}
-            >
-              {/* Top-right: código + valor */}
-              <Stack
-                spacing={0.7}
-                sx={{
-                  position: "absolute",
-                  right: { xs: 26, sm: 32, md: 44 },
-                  top:   { xs: 22, sm: 26, md: 34 },
-                  alignItems: "flex-end",
-                }}
-              >
-                <Typography sx={{ fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: { xs: 10, md: 12 }, color: "success.main", letterSpacing: 1.2 }}>
-                  CÓDIGO DE DESCONTO:
-                </Typography>
-                <Typography
-                  sx={{
-                    fontWeight: 900,
-                    letterSpacing: { xs: 1.5, md: 2.5 },
-                    fontSize: { xs: 22, sm: 26, md: 32 },
-                    lineHeight: 1,
-                    textShadow: "0 0 0.6px rgba(255,255,255,0.6)",
-                  }}
-                >
-                  {couponCode}
-                </Typography>
-                <Typography sx={{ fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: { xs: 10, md: 12 }, color: "success.main", letterSpacing: 1.2 }}>
-                  VALOR ACUMULADO:
-                </Typography>
-                <Typography sx={{ fontWeight: 900, color: "success.main", fontSize: { xs: 15, sm: 16, md: 18 }, lineHeight: 1 }}>
-                  {valorAcumulado.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-                </Typography>
-              </Stack>
-
-              {/* Logo + ondas */}
-              <Box
-                sx={{
-                  position: "absolute",
-                  left: { xs: 26, md: 44 },
-                  top: "50%",
-                  transform: "translateY(-50%)",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: { xs: 1, md: 1.3 },
-                }}
-              >
-                <Box
-                  component="img"
-                  src={logoNewStore}
-                  alt="NS"
-                  sx={{
-                    height: { xs: 46, sm: 70, md: 76 },
-                    objectFit: "contain",
-                    filter: "brightness(1.02)",
-                  }}
-                />
-                <Box component="svg" viewBox="0 0 60 30" sx={{ width: { xs: 38, md: 50 }, height: { xs: 20, md: 26 } }}>
-                  <path d="M20 5 C28 10, 28 20, 20 25" fill="none" stroke="#7CFF6B" strokeWidth="3" strokeLinecap="round"/>
-                  <path d="M34 3 C44 10, 44 20, 34 27" fill="none" stroke="#7CFF6B" strokeWidth="3" strokeLinecap="round" opacity={0.95}/>
-                  <path d="M48 1 C60 10, 60 20, 48 29" fill="none" stroke="#7CFF6B" strokeWidth="3" strokeLinecap="round" opacity={0.9}/>
-                </Box>
-              </Box>
-
-              {/* Nome */}
-              <Typography
-                sx={{
-                  position: "absolute",
-                  left:   { xs: 26, md: 44 },
-                  right: { xs: 16, md: 28 },
-                  bottom: { xs: 46, md: 56 },
-                  fontWeight: 900,
-                  letterSpacing: 1.5,
-                  textTransform: "uppercase",
-                  fontSize: { xs: 18, sm: 22, md: 28 },
-                  textAlign: "left",
-                  whiteSpace: "nowrap",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                }}
-              >
-                {headingName}
-              </Typography>
-
-              {/* Validade */}
-              <Stack spacing={0.3} sx={{ position: "absolute", left:   { xs: 36, md: 54 }, bottom: { xs: 12, md: 18 } }}>
-                <Typography sx={{ fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: { xs: 10, md: 12 }, letterSpacing: 1.2, opacity: 0.85 }}>
-                  VÁLIDO
-                </Typography>
-                <Stack direction="row" spacing={1}>
-                  <Typography sx={{ fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: { xs: 10, md: 12 }, letterSpacing: 1.2, opacity: 0.85 }}>
-                    ATÉ
-                  </Typography>
-                  <Typography sx={{ fontWeight: 800, fontSize: { xs: 12, md: 14 }, letterSpacing: 1 }}>
-                    {validade}
-                  </Typography>
-                </Stack>
-              </Stack>
-            </Paper>
-          </Box>
-
-          {/* ====== Números cativos ====== */}
-          <Paper variant="outlined" sx={{ p: { xs: 2, md: 3 } }}>
-            <Stack spacing={1.5}>
-              <Typography variant="h6" fontWeight={900}>Números cativos</Typography>
-              <Typography variant="body2" sx={{ opacity: .8 }}>
-                Garanta seus números preferidos em todo sorteio novo. Configure um cartão e o sistema compra automaticamente quando o sorteio abre.
-              </Typography>
-
-              <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: .5, flexWrap: "wrap" }}>
-                <Chip size="small" label="Seu cativo" sx={{ bgcolor:"#10233a", color:"#cbe6ff", border:"1px solid #9bd1ff" }} />
-                <Chip size="small" label="Ocupado" sx={{ bgcolor:"#2a1c1c", color:"#ffb3b3", border:"1px solid #ff8a8a" }} />
-                <Chip size="small" label="Livre" variant="outlined" />
-              </Stack>
-
-              <Box
-                sx={{
-                  display: "grid",
-                  gridTemplateColumns: {
-                    xs: "repeat(8, 1fr)",
-                    sm: "repeat(12, 1fr)",
-                    md: "repeat(20, 1fr)",
-                  },
-                  gap: .5,
-                  mt: 1,
-                }}
-              >
-                {Array.from({ length: 100 }, (_, n) => {
-                  const isMine  = claims.mine.includes(n);
-                  const isTaken = claims.taken.includes(n);
-                  const bg = isMine ? "#10233a" : isTaken ? "#2a1c1c" : "transparent";
-                  const bd = isMine ? "1px solid #9bd1ff" : isTaken ? "1px solid #ff8a8a" : "1px solid rgba(255,255,255,.14)";
-                  const fg = isMine ? "#cbe6ff" : isTaken ? "#ffb3b3" : "inherit";
-                  return (
-                    <Box
-                      key={n}
-                      sx={{
-                        userSelect: "none",
-                        textAlign: "center",
-                        py: .6,
-                        borderRadius: 999,
-                        fontWeight: 800,
-                        letterSpacing: .5,
-                        fontSize: 12,
-                        border: bd,
-                        bgcolor: bg,
-                        color: fg,
-                      }}
-                    >
-                      {String(n).padStart(2, "0")}
-                    </Box>
-                  );
-                })}
-              </Box>
-
-              <Stack direction={{ xs: "column", sm: "row" }} justifyContent="flex-end" sx={{ mt: 1 }}>
-                <Button variant="contained" onClick={() => setAutoOpen(true)}>
-                  Configurar número cativo
-                </Button>
-              </Stack>
-            </Stack>
-          </Paper>
-
           {/* Tabela */}
           <Paper variant="outlined" sx={{ p: { xs: 1, md: 2 } }}>
             {loading ? (
@@ -1047,12 +1039,14 @@ export default function AccountPage() {
                       <TableCell sx={{ fontWeight: 800, whiteSpace: "nowrap" }}>DIA</TableCell>
                       <TableCell sx={{ fontWeight: 800, whiteSpace: "nowrap" }}>PAGAMENTO</TableCell>
                       <TableCell sx={{ fontWeight: 800, whiteSpace: "nowrap" }}>STATUS</TableCell>
+                      <TableCell sx={{ fontWeight: 800, whiteSpace: "nowrap" }}>E-BOOK</TableCell>
+                      <TableCell sx={{ fontWeight: 800, whiteSpace: "nowrap" }} align="right">ESCOLHER</TableCell>
                       <TableCell sx={{ fontWeight: 800, whiteSpace: "nowrap" }} align="right">PAGAR</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
                     {rows.length === 0 && (
-                      <TableRow><TableCell colSpan={6} sx={{ color: "#bbb" }}>Nenhuma participação encontrada.</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={8} sx={{ color: "#bbb" }}>Nenhuma participação encontrada.</TableCell></TableRow>
                     )}
                     {rows.map((row, idx) => {
                       const isPending = /pendente|pending|await|aguard|open|ativo|active/i.test(String(row.pagamento || ""));
@@ -1068,6 +1062,10 @@ export default function AccountPage() {
                         else if (isOpen) navigate("/");
                       };
 
+                      const chooseEnabled = canChoose(row);
+                      const drawId = Number(row?.draw_id ?? row?.sorteio);
+                      const ebookInfo = ebookByDraw[drawId];
+
                       return (
                         <TableRow
                           key={`${row.sorteio}-${idx}`}
@@ -1082,6 +1080,40 @@ export default function AccountPage() {
                           <TableCell sx={{ width: 140 }}>{row.dia}</TableCell>
                           <TableCell><PayChip status={row.pagamento} /></TableCell>
                           <TableCell><ResultChip result={row.resultado} /></TableCell>
+
+                          {/* E-BOOK */}
+                          <TableCell>
+                            {isPaid ? (
+                              ebookInfo ? (
+                                <Button
+                                  size="small"
+                                  variant="outlined"
+                                  component="a"
+                                  href={ebookInfo.url}
+                                  target="_blank"
+                                  rel="noopener"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  Baixar e-book
+                                </Button>
+                              ) : (
+                                <Chip label="Aguardando link" size="small" sx={{ opacity: 0.7 }} />
+                              )
+                            ) : null}
+                          </TableCell>
+
+                          {/* Botão ESCOLHER */}
+                          <TableCell align="right" sx={{ width: 120 }}>
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              disabled={!chooseEnabled}
+                              onClick={(e) => { e.stopPropagation(); handleChooseNumbers(row); }}
+                            >
+                              Escolher
+                            </Button>
+                          </TableCell>
+
                           <TableCell align="right" sx={{ width: 120 }}>
                             {isPending ? (
                               <Button
@@ -1101,10 +1133,13 @@ export default function AccountPage() {
               </TableContainer>
             )}
 
-            <Stack direction={{ xs: "column", sm: "row" }} justifyContent="flex-end" alignItems={{ xs: "stretch", sm: "center" }} gap={1.5} sx={{ mt: 2 }}>
-              <Button component="a" href="http://newstorerj.com.br/" target="_blank" rel="noopener" variant="contained" color="success" fullWidth sx={{ maxWidth: { sm: 220 } }}>
-                Resgatar cupom
-              </Button>
+            <Stack
+              direction={{ xs: "column", sm: "row" }}
+              justifyContent="flex-end"
+              alignItems={{ xs: "stretch", sm: "center" }}
+              gap={1.5}
+              sx={{ mt: 2 }}
+            >
               <Button variant="text" onClick={doLogout} fullWidth sx={{ maxWidth: { sm: 120 } }}>
                 Sair
               </Button>

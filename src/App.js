@@ -21,6 +21,11 @@ import AdminVencedores from "./AdminVencedores";
 import AdminUsersPage from "./AdminUsersPage";
 import DrawBoardPage from "./DrawBoardPage";
 import AdminOpenDrawBuyers from "./AdminOpenDrawBuyers";
+import InfoproductsPage from "./InfoproductsPage.jsx";
+
+import PrivacyPolicy from './PrivacyPolicy';
+import TermsOfUse from './TermsOfUse';
+import ResponsibleGaming from './ResponsibleGaming'; // <-- Jogo Responsável
 
 // ⬇️ NOVO: lista os e-books por seções (categorias)
 import Infoprodutos from "./Infoprodutos";
@@ -115,6 +120,12 @@ export default function App() {
             <Route path="/admin/AdminClientesUser" element={<AdminUsersPage />} />
             <Route path="/me/draw/:id" element={<DrawBoardPage />} />
             <Route path="/admin/sorteiosAtivos" element={<AdminOpenDrawBuyers />} />
+            <Route path="/admin/infoproducts" element={<InfoproductsPage />} />
+
+            {/* Páginas estáticas */}
+        <Route path="/privacidade" element={<PrivacyPolicy />} />
+        <Route path="/termos" element={<TermsOfUse />} />
+        <Route path="/jogo-responsavel" element={<ResponsibleGaming />} />
           </Routes>
         </BrowserRouter>
       </SelectionContext.Provider>
