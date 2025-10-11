@@ -80,6 +80,18 @@ async function fetchJSON(url, opts = {}) {
   return ct.includes("application/json") ? r.json() : {};
 }
 
+/** Torna qualquer cover_url absoluta apontando para o BACKEND. */
+function resolveCoverUrl(u) {
+  if (!u) return "";
+  let s = String(u).trim();
+  // já absoluto
+  if (/^https?:\/\//i.test(s)) return s;
+  // começa com "/" -> prefixa host do backend
+  if (s.startsWith("/")) return `${API_BASE}${s}`;
+  // só o nome do arquivo -> assume pasta /public/covers
+  return `${API_BASE}/public/covers/${encodeURIComponent(s)}`;
+}
+
 /** CONFIRMA a compra no backend (credita vouchers). */
 async function confirmPurchaseAndGrantVoucher({ paymentId, infoproduct_id, token }) {
   const r = await fetch(`${API_BASE}/api/purchases/confirm`, {
@@ -96,32 +108,7 @@ async function confirmPurchaseAndGrantVoucher({ paymentId, infoproduct_id, token
 }
 
 /* ================================================================
-   NOVO: normalizador de cover_url
-   - troca '/public/ebooks/' -> '/static/covers/'
-   - se vier '/public/covers/' também troca para '/static/covers/'
-   - prefixa com API_BASE quando a URL for relativa
-   ================================================================ */
-function normalizeCoverUrl(u) {
-  if (!u) return "";
-  let url = String(u).trim();
-
-  // corrige caminhos antigos gravados no banco
-  if (url.startsWith("/public/ebooks/")) {
-    url = url.replace(/^\/public\/ebooks\//, "/static/covers/");
-  } else if (url.startsWith("/public/covers/")) {
-    url = url.replace(/^\/public\//, "/static/");
-  }
-
-  // se já for absoluta, mantém
-  if (/^https?:\/\//i.test(url)) return url;
-
-  // garante o prefixo do backend
-  if (url.startsWith("/")) return `${API_BASE}${url}`;
-  return `${API_BASE}/${url}`;
-}
-
-/* ================================================================
-   Pegar SEMPRE o draw do infoproduto correto via /open-draw
+   Pegar SEMPRE o draw via /open-draw (com fallback legado)
    ================================================================ */
 function getProductKey(p) {
   return p?.sku || p?.id;
@@ -130,7 +117,6 @@ async function findOpenDrawForProduct(p) {
   const key = getProductKey(p);
   if (!key) return null;
 
-  // 1) endpoint novo (preferencial)
   try {
     const j = await fetchJSON(`${API_BASE}/api/infoproducts/${encodeURIComponent(key)}/open-draw`);
     const d = j?.draw;
@@ -149,8 +135,7 @@ async function findOpenDrawForProduct(p) {
       reserved,
       sold,
     };
-  } catch (e) {
-    // 2) fallback legado
+  } catch {
     try {
       const u = `${API_BASE}/api/draws?infoproduct_id=${encodeURIComponent(p.id)}&status=open`;
       const j = await fetchJSON(u);
@@ -172,9 +157,7 @@ async function findOpenDrawForProduct(p) {
   }
 }
 
-/**
- * Carrega infoprodutos de uma categoria e, se houver, o draw aberto vinculado.
- */
+/** Carrega infoprodutos + draw vinculado */
 function useInfoproductCards(categorySlug = "lotomania") {
   const [loading, setLoading] = React.useState(true);
   const [cards, setCards] = React.useState([]);
@@ -258,11 +241,10 @@ function ProgressNumbers({ total = 100, reserved = 0, sold = 0 }) {
   );
 }
 
-/** === Loader de números (compatível com o backend novo e o legado) === */
+/** Loader de números (novo + legado) */
 async function loadNumbersForDraw(drawId, productKey) {
   if (drawId == null) return [];
 
-  // 1) rota tradicional (se existir no seu backend)
   try {
     const r = await fetch(`${API_BASE}/api/draws/${encodeURIComponent(drawId)}/numbers`, {
       credentials: "include",
@@ -278,7 +260,6 @@ async function loadNumbersForDraw(drawId, productKey) {
     }
   } catch {}
 
-  // 2) fallback com o endpoint novo (inclui numbers)
   if (productKey) {
     try {
       const j = await fetchJSON(`${API_BASE}/api/infoproducts/${encodeURIComponent(productKey)}/open-draw?include=numbers`);
@@ -294,7 +275,6 @@ async function loadNumbersForDraw(drawId, productKey) {
   return [];
 }
 
-/** Mini grade 10x10 somente leitura (com números do draw certo) */
 function NumbersMiniBoard({ drawId, productKey }) {
   const [nums, setNums] = React.useState([]);
 
@@ -422,7 +402,6 @@ function Footer() {
 }
 /** ==================== /FOOTER ==================== */
 
-/** Modal para escolher quantidade (1–20) antes de gerar o PIX */
 function PurchaseQtyDialog({ open, onClose, onConfirm, unitPriceCents = 0 }) {
   const [qty, setQty] = React.useState(1);
   React.useEffect(() => { if (open) setQty(1); }, [open]);
@@ -503,7 +482,6 @@ export default function HomePage({ groupUrl = "https://chat.whatsapp.com/Byb4qBR
     handoverTimerRef.current = null;
   }
 
-  // Ao aprovar PIX: transição + confirmação + ensure draw + navegação
   React.useEffect(() => {
     if (!pixOpen || !pixData?.paymentId) return;
     const id = setInterval(async () => {
@@ -724,21 +702,20 @@ export default function HomePage({ groupUrl = "https://chat.whatsapp.com/Byb4qBR
             const d = row?.draw || {};
             const prize = ((p.prize_cents ?? p.default_prize_cents ?? d?.prize_cents ?? 0) / 100);
             const price = ((d?.ticket_price_cents ?? p.price_cents ?? 0) / 100);
-
-            const coverUrl = normalizeCoverUrl(p.cover_url); // <-- usa normalizador
+            const cover = resolveCoverUrl(p.cover_url);
 
             return (
               <Card key={p.id || idx} variant="outlined" sx={{ display: "flex", flexDirection: "column" }}>
                 <Box
                   sx={{
                     position: "relative", aspectRatio: "16 / 9", borderBottom: "1px solid rgba(255,255,255,0.06)",
-                    background: coverUrl
-                      ? `url(${coverUrl}) center/cover no-repeat`
+                    background: cover
+                      ? `url(${cover}) center/cover no-repeat`
                       : "repeating-linear-gradient(135deg, rgba(255,255,255,0.06) 0 8px, rgba(255,255,255,0.03) 8px 16px)",
                     display: "flex", alignItems: "center", justifyContent: "center",
                   }}
                 >
-                  {!coverUrl && (
+                  {!cover && (
                     <Typography sx={{ opacity: 0.65, fontWeight: 700 }}>
                       Espaço para a <strong>arte do e-book</strong>
                     </Typography>
@@ -778,7 +755,6 @@ export default function HomePage({ groupUrl = "https://chat.whatsapp.com/Byb4qBR
                     {isAuthenticated ? "Entrar para comprar" : "Entrar para comprar"}
                   </Button>
 
-                  {/* Mini grade do sorteio vinculado (somente leitura) */}
                   {d?.id ? <NumbersMiniBoard drawId={d.id} productKey={getProductKey(p)} /> : null}
                 </CardActions>
               </Card>
