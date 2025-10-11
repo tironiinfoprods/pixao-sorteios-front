@@ -691,7 +691,7 @@ export default function HomePage({ groupUrl = "https://chat.whatsapp.com/Byb4qBR
           </Typography>
           <Typography sx={{ opacity: 0.9 }}>
             O sorteio ocorrerá com base na <strong>Lotomania</strong> assim que <strong>todos os números</strong> do
-            quadro forem vendidos. Utilizaremos o <strong>próximo sorteio posterior</strong> ao fechamento da tabela.
+            quadro forem vendidos. Utilizaremos o <strong>próximo sorteio posterior</strong> ao fechamento da tabela. O Vencedor será o comprador do ultimo número sorteado.
           </Typography>
         </Paper>
 
