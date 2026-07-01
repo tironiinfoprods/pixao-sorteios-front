@@ -211,7 +211,7 @@ function Sparkles() {
 export default function NewStorePage({
   reservados = MOCK_RESERVADOS,
   indisponiveis = MOCK_INDISPONIVEIS,
-  groupUrl = "https://chat.whatsapp.com/JBSALSczVrw3TqK8tIkk0z",
+  groupUrl = "https://wa.me/554396717931",
 }) {
   const navigate = useNavigate();
   const { selecionados, setSelecionados, limparSelecao } =
