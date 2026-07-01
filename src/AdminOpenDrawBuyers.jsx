@@ -10,7 +10,6 @@ import ArrowBackIosNewRoundedIcon from "@mui/icons-material/ArrowBackIosNewRound
 import AccountCircleRoundedIcon from "@mui/icons-material/AccountCircleRounded";
 import DownloadRoundedIcon from "@mui/icons-material/DownloadRounded";
 import logoNewStore from "./Logo-branca-sem-fundo-768x132.png";
-import { useAuth } from "./authContext";
 
 /* ---------- tema ---------- */
 const theme = createTheme({
@@ -64,7 +63,6 @@ const buyerColor = (idx) => {
 
 export default function AdminOpenDrawBuyers() {
   const navigate = useNavigate();
-  const { logout } = useAuth();
 
   const [tab, setTab] = React.useState(0);
   const [loading, setLoading] = React.useState(true);

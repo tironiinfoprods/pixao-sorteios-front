@@ -2,7 +2,6 @@
 import * as React from "react";
 import { useNavigate, Link as RouterLink } from "react-router-dom";
 import logoNewStore from "./Logo-branca-sem-fundo-768x132 - Copia.png";
-import { SelectionContext } from "./selectionContext";
 import { useAuth } from "./authContext";
 import {
   AppBar, Box, Button, Chip, Container, CssBaseline, IconButton, Menu, MenuItem,
@@ -142,7 +141,7 @@ async function fetchJsonLoose(url, options) {
   } catch {
     try {
       const txt = await r.text();
-      const cleaned = String(txt).trim().replace(/^[^\[{]*/, "");
+      const cleaned = String(txt).trim().replace(/^[^[{]*/, "");
       return JSON.parse(cleaned);
     } catch {
       return null;
@@ -249,7 +248,6 @@ async function resolveEbookForDraw(drawId) {
 
 export default function AccountPage() {
   const navigate = useNavigate();
-  const { selecionados } = React.useContext(SelectionContext);
   const { logout, user: ctxUser } = useAuth();
 
   const [menuEl, setMenuEl] = React.useState(null);
@@ -258,12 +256,12 @@ export default function AccountPage() {
   const [rows, setRows] = React.useState([]);
 
   // ► saldo (mantido internamente)
-  const [baseCents, setBaseCents] = React.useState(0);
-  const [paidCents, setPaidCents] = React.useState(0);
-  const [officialCents, setOfficialCents] = React.useState(0);
+  const [, setBaseCents] = React.useState(0);
+  const [, setPaidCents] = React.useState(0);
+  const [, setOfficialCents] = React.useState(0);
 
-  const [cupom, setCupom] = React.useState("CUPOMAQUI");
-  const [validade, setValidade] = React.useState("--/--/--");
+  const [, setCupom] = React.useState("CUPOMAQUI");
+  const [, setValidade] = React.useState("--/--/--");
 
   // estado das configurações (apenas admin)
   const [cfgLoading, setCfgLoading] = React.useState(false);
@@ -282,7 +280,7 @@ export default function AccountPage() {
 
   // AutoPay
   const [autoOpen, setAutoOpen] = React.useState(false);
-  const [claims, setClaims] = React.useState({ taken: [], mine: [] });
+  const [, setClaims] = React.useState({ taken: [], mine: [] });
   async function loadClaims() {
     try {
       const j = await getJSON("/autopay/claims");
@@ -489,9 +487,6 @@ export default function AccountPage() {
     const key = pixData?.copy || pixData?.copy_paste || pixData?.copy_paste_code || pixData?.emv || pixData?.qr_code || "";
     if (key) navigator.clipboard.writeText(key).catch(() => {});
   }
-
-  const isLoggedIn = !!(user?.email || user?.id);
-  const logoTo = isLoggedIn ? "/conta" : "/";
 
   const doLogout = () => { setMenuEl(null); logout(); navigate("/"); };
   const storedMe = React.useMemo(() => {
@@ -895,8 +890,6 @@ export default function AccountPage() {
   /* ============================================================================ */
 
   const u = user || {};
-  const headingName =
-    u.name || u.fullName || u.nome || u.displayName || u.username || u.email || "NOME DO CLIENTE";
   const isAdminUser = !!(u?.is_admin || u?.role === "admin" || (u?.email && u.email.toLowerCase() === ADMIN_EMAIL));
 
   // salvar config

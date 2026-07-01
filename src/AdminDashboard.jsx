@@ -517,8 +517,6 @@ export default function AdminDashboard() {
   const goPainel = () => { closeMenu(); navigate("/admin"); };
   const doLogout = () => { closeMenu(); logout(); navigate("/"); };
 
-  const configPriceCents = Math.max(0, Math.floor(Number(price || 0)));
-
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
