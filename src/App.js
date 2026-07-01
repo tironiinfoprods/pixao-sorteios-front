@@ -1,6 +1,7 @@
 // src/App.js
 import React from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { Analytics } from "@vercel/analytics/react";
 
 import { SelectionContext } from "./selectionContext";
 import HomePage from "./HomePage";
@@ -128,6 +129,7 @@ export default function App() {
         <Route path="/jogo-responsavel" element={<ResponsibleGaming />} />
           </Routes>
         </BrowserRouter>
+        <Analytics />
       </SelectionContext.Provider>
     </AuthProvider>
   );
