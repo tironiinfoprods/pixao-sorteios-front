@@ -9,6 +9,10 @@ import {
 import AccountCircleRoundedIcon from "@mui/icons-material/AccountCircleRounded";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import RemoveRoundedIcon from "@mui/icons-material/RemoveRounded";
+import EmojiEventsRoundedIcon from "@mui/icons-material/EmojiEventsRounded";
+import BoltRoundedIcon from "@mui/icons-material/BoltRounded";
+import ExpandMoreRoundedIcon from "@mui/icons-material/ExpandMoreRounded";
+import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
 
 import logoNewStore from "./Logo-branca-sem-fundo-768x132.png";
 import heroImage from "./hero_image.png";
@@ -227,17 +231,421 @@ function useInfoproductCards(categorySlug = "lotomania") {
   return { loading, cards };
 }
 
-function ProgressNumbers({ total = 100, reserved = 0, sold = 0 }) {
+function ProgressNumbers({ total = 100, reserved = 0, sold = 0, showUrgency = false }) {
   const used = (reserved || 0) + (sold || 0);
   const left = Math.max(0, total - used);
   const pct = total > 0 ? Math.min(100, Math.round((used / total) * 100)) : 0;
+  const urgent = left <= 20;
   return (
-    <Stack spacing={0.5}>
-      <LinearProgress variant="determinate" value={pct} />
-      <Typography variant="caption" sx={{ opacity: 0.85 }}>
-        {left} de {total} números disponíveis
-      </Typography>
+    <Stack spacing={0.75}>
+      <Stack direction="row" justifyContent="space-between" alignItems="center">
+        <Typography variant="caption" sx={{ opacity: 0.85, fontWeight: 700 }}>
+          {left} de {total} números disponíveis
+        </Typography>
+        {showUrgency && urgent ? (
+          <Chip
+            size="small"
+            icon={<BoltRoundedIcon sx={{ fontSize: 16 }} />}
+            label="Quase esgotando"
+            color="warning"
+            sx={{ fontWeight: 800, height: 24 }}
+          />
+        ) : null}
+      </Stack>
+      <LinearProgress
+        variant="determinate"
+        value={pct}
+        sx={{
+          height: 8,
+          borderRadius: 99,
+          bgcolor: "rgba(255,255,255,0.08)",
+          "& .MuiLinearProgress-bar": {
+            borderRadius: 99,
+            background: urgent
+              ? "linear-gradient(90deg,#FF9800,#FFC107)"
+              : "linear-gradient(90deg,#59b15f,#67C23A)",
+          },
+        }}
+      />
     </Stack>
+  );
+}
+
+function getPrizeCents(p, d) {
+  return p?.prize_cents ?? p?.default_prize_cents ?? d?.prize_cents ?? 0;
+}
+
+function getPriceCents(p, d) {
+  return d?.ticket_price_cents ?? p?.price_cents ?? 0;
+}
+
+function pickFeaturedCard(cards) {
+  if (!cards?.length) return null;
+  return cards.reduce((best, row) => {
+    const bestPrize = getPrizeCents(best?.product, best?.draw);
+    const rowPrize = getPrizeCents(row?.product, row?.draw);
+    return rowPrize > bestPrize ? row : best;
+  }, cards[0]);
+}
+
+function HowItWorks() {
+  const steps = [
+    { n: "1", title: "Escolha seu e-book", desc: "Cada unidade = 1 número na rifa" },
+    { n: "2", title: "Pague via PIX", desc: "Confirmação rápida e segura" },
+    { n: "3", title: "Escolha seu número", desc: "Sorteio pela Lotomania ao esgotar" },
+  ];
+  return (
+    <Box
+      sx={{
+        display: "grid",
+        gridTemplateColumns: { xs: "1fr", md: "repeat(3, 1fr)" },
+        gap: 2,
+        mb: 4,
+      }}
+    >
+      {steps.map((s) => (
+        <Paper
+          key={s.n}
+          variant="outlined"
+          sx={{
+            p: 2,
+            borderColor: "rgba(255,255,255,0.1)",
+            bgcolor: "rgba(255,255,255,0.02)",
+          }}
+        >
+          <Stack direction="row" spacing={1.5} alignItems="flex-start">
+            <Box
+              sx={{
+                width: 32,
+                height: 32,
+                borderRadius: "50%",
+                bgcolor: "secondary.main",
+                color: "#0E0E0E",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontWeight: 900,
+                flexShrink: 0,
+              }}
+            >
+              {s.n}
+            </Box>
+            <Box>
+              <Typography sx={{ fontWeight: 800, lineHeight: 1.2 }}>{s.title}</Typography>
+              <Typography variant="body2" sx={{ opacity: 0.8, mt: 0.25 }}>
+                {s.desc}
+              </Typography>
+            </Box>
+          </Stack>
+        </Paper>
+      ))}
+    </Box>
+  );
+}
+
+function PrizeHero({
+  loading,
+  featured,
+  onBuy,
+  isAuthenticated,
+}) {
+  const p = featured?.product || {};
+  const d = featured?.draw || {};
+  const prize = getPrizeCents(p, d) / 100;
+  const price = getPriceCents(p, d) / 100;
+  const cover = resolveCoverUrl(p.cover_url);
+  const total = d?.total_numbers ?? 100;
+  const used = (d?.reserved ?? 0) + (d?.sold ?? 0);
+  const left = Math.max(0, total - used);
+
+  const ctaLabel = isAuthenticated ? "Garantir meu número agora" : "Criar conta e participar";
+  const ctaSub = isAuthenticated
+    ? `A partir de ${BRL.format(price)} por número`
+    : "Cadastro rápido • pague com PIX";
+
+  return (
+    <Paper
+      elevation={0}
+      sx={{
+        p: { xs: 2.5, md: 4 },
+        borderRadius: 4,
+        position: "relative",
+        overflow: "hidden",
+        mb: 4,
+        border: "1px solid rgba(255,213,79,0.25)",
+        background:
+          "radial-gradient(900px 420px at 0% 0%, rgba(255,193,7,0.18), transparent 55%), radial-gradient(900px 420px at 100% 100%, rgba(103,194,58,0.14), transparent 55%), linear-gradient(180deg, rgba(22,22,22,0.98), rgba(14,14,14,0.98))",
+      }}
+    >
+      <Box
+        aria-hidden
+        sx={{
+          position: "absolute",
+          inset: 0,
+          backgroundImage: `url(${heroImage})`,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          opacity: 0.12,
+        }}
+      />
+
+      <Box
+        sx={{
+          position: "relative",
+          zIndex: 1,
+          display: "grid",
+          gridTemplateColumns: { xs: "1fr", md: "1.1fr 0.9fr" },
+          gap: { xs: 3, md: 4 },
+          alignItems: "center",
+        }}
+      >
+        <Stack spacing={2.5}>
+          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+            {lotomaniaLogo ? (
+              <Box component="img" src={lotomaniaLogo} alt="Lotomania" sx={{ height: 36, objectFit: "contain" }} />
+            ) : (
+              <Chip label="Lotomania" color="warning" size="small" />
+            )}
+            <Chip
+              size="small"
+              icon={<EmojiEventsRoundedIcon sx={{ fontSize: 18 }} />}
+              label="Sorteio ativo"
+              sx={{ bgcolor: "rgba(103,194,58,0.2)", border: "1px solid rgba(103,194,58,0.5)", fontWeight: 700 }}
+            />
+          </Stack>
+
+          <Box>
+            <Typography
+              variant="overline"
+              sx={{ letterSpacing: 2, color: "secondary.main", fontWeight: 900, display: "block", mb: 0.5 }}
+            >
+              PRÊMIO EM DINHEIRO
+            </Typography>
+            {loading ? (
+              <Typography variant="h2" sx={{ fontWeight: 900, opacity: 0.4 }}>
+                Carregando…
+              </Typography>
+            ) : (
+              <Typography
+                variant="h2"
+                sx={{
+                  fontWeight: 900,
+                  lineHeight: 1,
+                  fontSize: { xs: "2.75rem", sm: "3.5rem", md: "4rem" },
+                  background: "linear-gradient(90deg,#FFD54F,#FFF176,#A5D6A7)",
+                  WebkitBackgroundClip: "text",
+                  backgroundClip: "text",
+                  WebkitTextFillColor: "transparent",
+                }}
+              >
+                {BRL.format(prize)}
+              </Typography>
+            )}
+          </Box>
+
+          <Typography variant="h6" sx={{ opacity: 0.92, maxWidth: 520, fontWeight: 600 }}>
+            {loading
+              ? "Preparando o sorteio da Lotomania…"
+              : p.title
+                ? `Participe comprando "${p.title}" e escolha seu número entre 00 e 99.`
+                : "Compre o e-book, escolha seu número e concorra ao prêmio quando a tabela fechar."}
+          </Typography>
+
+          {!loading && left > 0 ? (
+            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+              <Chip
+                icon={<CheckCircleRoundedIcon sx={{ fontSize: 18 }} />}
+                label={`${left} números restantes`}
+                color={left <= 20 ? "warning" : "success"}
+                variant="outlined"
+                sx={{ fontWeight: 700 }}
+              />
+              <Chip label={`${BRL.format(price)} / número`} variant="outlined" sx={{ fontWeight: 700 }} />
+            </Stack>
+          ) : null}
+
+          {!loading && d?.total_numbers ? (
+            <Box sx={{ maxWidth: 420 }}>
+              <ProgressNumbers
+                total={d.total_numbers}
+                reserved={d.reserved ?? 0}
+                sold={d.sold ?? 0}
+                showUrgency
+              />
+            </Box>
+          ) : null}
+
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ pt: 0.5 }}>
+            <Button
+              size="large"
+              color="success"
+              variant="contained"
+              disabled={loading || !featured}
+              onClick={() => featured && onBuy(p, getPriceCents(p, d))}
+              sx={{
+                fontWeight: 900,
+                px: 4,
+                py: 1.5,
+                fontSize: "1.05rem",
+                boxShadow: "0 8px 32px rgba(89,177,95,0.35)",
+              }}
+            >
+              {ctaLabel}
+            </Button>
+            <Typography variant="body2" sx={{ opacity: 0.75, alignSelf: "center" }}>
+              {ctaSub}
+            </Typography>
+          </Stack>
+        </Stack>
+
+        <Box
+          sx={{
+            position: "relative",
+            borderRadius: 3,
+            overflow: "hidden",
+            border: "1px solid rgba(255,255,255,0.1)",
+            aspectRatio: { xs: "16/10", md: "4/5" },
+            maxHeight: { md: 420 },
+            background: cover
+              ? `url(${cover}) center/cover no-repeat`
+              : "repeating-linear-gradient(135deg, rgba(255,255,255,0.06) 0 8px, rgba(255,255,255,0.03) 8px 16px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          {!cover && (
+            <Typography sx={{ opacity: 0.65, fontWeight: 700, px: 2, textAlign: "center" }}>
+              Capa do e-book
+            </Typography>
+          )}
+          {!loading && prize > 0 ? (
+            <Box
+              sx={{
+                position: "absolute",
+                bottom: 12,
+                left: 12,
+                right: 12,
+                p: 1.5,
+                borderRadius: 2,
+                bgcolor: "rgba(0,0,0,0.72)",
+                border: "1px solid rgba(255,213,79,0.35)",
+                backdropFilter: "blur(8px)",
+              }}
+            >
+              <Typography variant="caption" sx={{ opacity: 0.85, fontWeight: 700 }}>
+                PRÊMIO GARANTIDO
+              </Typography>
+              <Typography variant="h5" sx={{ fontWeight: 900, color: "secondary.main", lineHeight: 1.1 }}>
+                {BRL.format(prize)}
+              </Typography>
+            </Box>
+          ) : null}
+        </Box>
+      </Box>
+    </Paper>
+  );
+}
+
+function ProductCard({ row, loading, onBuy, isAuthenticated, featured = false }) {
+  const p = row?.product || {};
+  const d = row?.draw || {};
+  const prize = getPrizeCents(p, d) / 100;
+  const price = getPriceCents(p, d) / 100;
+  const cover = resolveCoverUrl(p.cover_url);
+  const ctaLabel = isAuthenticated ? "Comprar e escolher número" : "Entrar e comprar";
+
+  if (loading) {
+    return (
+      <Card variant="outlined" sx={{ display: "flex", flexDirection: "column", minHeight: 360, opacity: 0.5 }}>
+        <Box sx={{ aspectRatio: "16/9", bgcolor: "rgba(255,255,255,0.04)" }} />
+        <CardContent><Typography>Carregando…</Typography></CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card
+      variant="outlined"
+      sx={{
+        display: "flex",
+        flexDirection: "column",
+        borderColor: featured ? "rgba(255,213,79,0.35)" : "rgba(255,255,255,0.12)",
+        bgcolor: featured ? "rgba(255,213,79,0.04)" : "transparent",
+      }}
+    >
+      <Box
+        sx={{
+          position: "relative",
+          aspectRatio: "16 / 9",
+          borderBottom: "1px solid rgba(255,255,255,0.06)",
+          background: cover
+            ? `url(${cover}) center/cover no-repeat`
+            : "repeating-linear-gradient(135deg, rgba(255,255,255,0.06) 0 8px, rgba(255,255,255,0.03) 8px 16px)",
+        }}
+      >
+        <Chip
+          label={`Prêmio ${BRL.format(prize)}`}
+          size="small"
+          sx={{
+            position: "absolute",
+            top: 12,
+            left: 12,
+            fontWeight: 900,
+            bgcolor: "rgba(0,0,0,0.75)",
+            color: "secondary.main",
+            border: "1px solid rgba(255,213,79,0.4)",
+          }}
+        />
+      </Box>
+
+      <CardContent sx={{ flex: 1 }}>
+        <Typography variant="overline" sx={{ opacity: 0.8 }}>
+          {p.subtitle || "E-book + rifa"}
+        </Typography>
+        <Typography variant="h6" fontWeight={900}>
+          {p.title || "E-book"}
+        </Typography>
+
+        <Typography variant="h5" sx={{ mt: 1.5, fontWeight: 900, color: "secondary.main" }}>
+          {BRL.format(prize)}
+        </Typography>
+        <Typography variant="body2" sx={{ opacity: 0.85 }}>
+          por apenas <strong>{BRL.format(price)}</strong> / número
+        </Typography>
+
+        {p.description ? (
+          <Typography variant="body2" sx={{ mt: 1.5, opacity: 0.85 }}>
+            {p.description}
+          </Typography>
+        ) : null}
+
+        {d?.total_numbers ? (
+          <Box sx={{ mt: 2 }}>
+            <ProgressNumbers
+              total={d.total_numbers}
+              reserved={d.reserved ?? 0}
+              sold={d.sold ?? 0}
+              showUrgency
+            />
+          </Box>
+        ) : null}
+      </CardContent>
+
+      <CardActions sx={{ p: 2, pt: 0, flexDirection: "column", alignItems: "stretch", gap: 1 }}>
+        <Button
+          fullWidth
+          size="large"
+          color="success"
+          variant="contained"
+          onClick={() => onBuy(p, getPriceCents(p, d))}
+          sx={{ fontWeight: 900 }}
+        >
+          {ctaLabel}
+        </Button>
+        {d?.id ? <NumbersMiniBoard drawId={d.id} productKey={getProductKey(p)} collapsed /> : null}
+      </CardActions>
+    </Card>
   );
 }
 
@@ -275,8 +683,9 @@ async function loadNumbersForDraw(drawId, productKey) {
   return [];
 }
 
-function NumbersMiniBoard({ drawId, productKey }) {
+function NumbersMiniBoard({ drawId, productKey, collapsed = false }) {
   const [nums, setNums] = React.useState([]);
+  const [expanded, setExpanded] = React.useState(!collapsed);
 
   React.useEffect(() => {
     let alive = true;
@@ -306,40 +715,60 @@ function NumbersMiniBoard({ drawId, productKey }) {
 
   return (
     <Box sx={{ mt: 1.5 }}>
-      <Typography variant="caption" sx={{ opacity: 0.75, display: "block", mb: 0.5 }}>
-        Tabela (somente leitura)
-      </Typography>
-      <Box sx={{ display: "grid", gridTemplateColumns: "repeat(10, 1fr)", gap: 0.5 }}>
-        {Array.from({ length: 100 }).map((_, i) => {
-          const st = statusByN[i] || "available";
-          const label = String(i).padStart(2, "0");
-          return (
-            <Box
-              key={i}
-              title={`${label} — ${st}`}
-              sx={{
-                aspectRatio: "1 / 1",
-                borderRadius: 0.75,
-                fontSize: 10,
-                fontWeight: 900,
-                lineHeight: 1,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                userSelect: "none",
-                ...sxFor(st),
-              }}
-            >
-              {label}
-            </Box>
-          );
-        })}
-      </Box>
-      <Stack direction="row" spacing={1} sx={{ mt: 1 }} alignItems="center" flexWrap="wrap">
-        <Chip size="small" label="Disponível" sx={{ bgcolor: "rgba(103,194,58,0.25)", border: "1px solid #67C23A" }} />
-        <Chip size="small" label="Reservado" sx={{ bgcolor: "rgba(255,193,7,0.22)", border: "1px solid #FFC107" }} />
-        <Chip size="small" label="Indisponível" sx={{ bgcolor: "rgba(211,47,47,0.25)", border: "1px solid #D32F2F" }} />
-      </Stack>
+      {collapsed ? (
+        <Button
+          fullWidth
+          size="small"
+          variant="outlined"
+          endIcon={
+            <ExpandMoreRoundedIcon
+              sx={{ transform: expanded ? "rotate(180deg)" : "none", transition: "0.2s" }}
+            />
+          }
+          onClick={() => setExpanded((v) => !v)}
+          sx={{ fontWeight: 700, borderColor: "rgba(255,255,255,0.2)" }}
+        >
+          {expanded ? "Ocultar tabela de números" : "Ver números disponíveis"}
+        </Button>
+      ) : null}
+      {(!collapsed || expanded) ? (
+        <>
+          <Typography variant="caption" sx={{ opacity: 0.75, display: "block", mb: 0.5, mt: collapsed ? 1 : 0 }}>
+            Tabela (somente leitura)
+          </Typography>
+          <Box sx={{ display: "grid", gridTemplateColumns: "repeat(10, 1fr)", gap: 0.5 }}>
+            {Array.from({ length: 100 }).map((_, i) => {
+              const st = statusByN[i] || "available";
+              const label = String(i).padStart(2, "0");
+              return (
+                <Box
+                  key={i}
+                  title={`${label} — ${st}`}
+                  sx={{
+                    aspectRatio: "1 / 1",
+                    borderRadius: 0.75,
+                    fontSize: 10,
+                    fontWeight: 900,
+                    lineHeight: 1,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    userSelect: "none",
+                    ...sxFor(st),
+                  }}
+                >
+                  {label}
+                </Box>
+              );
+            })}
+          </Box>
+          <Stack direction="row" spacing={1} sx={{ mt: 1 }} alignItems="center" flexWrap="wrap">
+            <Chip size="small" label="Disponível" sx={{ bgcolor: "rgba(103,194,58,0.25)", border: "1px solid #67C23A" }} />
+            <Chip size="small" label="Reservado" sx={{ bgcolor: "rgba(255,193,7,0.22)", border: "1px solid #FFC107" }} />
+            <Chip size="small" label="Indisponível" sx={{ bgcolor: "rgba(211,47,47,0.25)", border: "1px solid #D32F2F" }} />
+          </Stack>
+        </>
+      ) : null}
     </Box>
   );
 }
@@ -452,6 +881,12 @@ export default function HomePage({ groupUrl = "https://chat.whatsapp.com/Byb4qBR
   const doLogout = () => { handleCloseMenu(); logout(); navigate("/"); };
 
   const { loading, cards } = useInfoproductCards("lotomania");
+  const featured = React.useMemo(() => pickFeaturedCard(cards), [cards]);
+  const otherCards = React.useMemo(() => {
+    if (!featured || !cards?.length) return cards || [];
+    const featuredId = featured?.product?.id;
+    return cards.filter((c) => c?.product?.id !== featuredId);
+  }, [cards, featured]);
 
   // PIX modal
   const [pixOpen, setPixOpen] = React.useState(false);
@@ -637,130 +1072,59 @@ export default function HomePage({ groupUrl = "https://chat.whatsapp.com/Byb4qBR
         </Toolbar>
       </AppBar>
 
-      <Container maxWidth="lg" sx={{ py: { xs: 4, md: 6 } }}>
-        {/* HERO */}
+      <Container maxWidth="lg" sx={{ py: { xs: 3, md: 5 }, pb: { xs: 12, md: 5 } }}>
+        <PrizeHero
+          loading={loading}
+          featured={featured}
+          onBuy={onBuyClick}
+          isAuthenticated={isAuthenticated}
+        />
+
+        <HowItWorks />
+
         <Paper
-          elevation={0}
+          variant="outlined"
           sx={{
-            p: { xs: 3, md: 6 }, borderRadius: 3, position: "relative", overflow: "hidden",
-            background:
-              "radial-gradient(1000px 500px at -10% -10%, rgba(255,193,7,0.12), transparent 60%), radial-gradient(1000px 500px at 110% 110%, rgba(103,194,58,0.12), transparent 60%), linear-gradient(180deg, rgba(18,18,18,0.85), rgba(18,18,18,0.85))",
-            border: "1px solid rgba(255,255,255,0.06)", mb: 4,
+            p: { xs: 2, md: 2.5 },
+            mb: 4,
+            borderColor: "rgba(255,255,255,0.1)",
+            bgcolor: "rgba(255,255,255,0.02)",
           }}
         >
-          <Box
-            aria-hidden
-            sx={{
-              position: "absolute", inset: 0, backgroundImage: `url(${heroImage})`,
-              backgroundSize: "cover", backgroundPosition: "center", opacity: 0.2, mixBlendMode: "screen",
-            }}
-          />
-          <Stack spacing={2} sx={{ position: "relative", zIndex: 1, textAlign: "center" }}>
-            <Typography variant="overline" sx={{ letterSpacing: 2, color: "secondary.main", fontWeight: 900 }}>
-              INFOPRODUTOS • PIXÃO NA MÃO
+          <Typography sx={{ fontWeight: 800, mb: 0.5 }}>
+            Como o vencedor é definido
+          </Typography>
+          <Typography variant="body2" sx={{ opacity: 0.9 }}>
+            Quando todos os números forem vendidos, usamos o <strong>próximo sorteio da Lotomania</strong>.
+            O ganhador é quem comprou o <strong>último número sorteado</strong> entre os 100 da tabela.
+          </Typography>
+        </Paper>
+
+        {otherCards.length > 0 ? (
+          <>
+            <Typography variant="h5" fontWeight={900} sx={{ mb: 2 }}>
+              Outras opções de e-book
             </Typography>
-            <Typography
-              variant="h3"
+            <Box
               sx={{
-                fontWeight: 900, lineHeight: 1.1,
-                background: "linear-gradient(90deg,#FFD54F,#FFF176,#67C23A)",
-                WebkitBackgroundClip: "text", backgroundClip: "text", WebkitTextFillColor: "transparent",
-                textShadow: "0 0 24px rgba(255,213,79,0.25)",
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)", md: "repeat(3, 1fr)" },
+                gap: 2.5,
+                mb: 4,
               }}
             >
-              Escolha o e-book do seu nível e participe
-            </Typography>
-            <Typography variant="h6" sx={{ opacity: 0.9, maxWidth: 860, mx: "auto" }}>
-              Exibindo a categoria <strong>Lotomania</strong>. Cada e-book dá direito a escolher 1 número.
-            </Typography>
-          </Stack>
-        </Paper>
-
-        {/* Cabeçalho Lotomania */}
-        <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
-          {lotomaniaLogo
-            ? <Box component="img" src={lotomaniaLogo} alt="Lotomania logo" sx={{ height: 42, objectFit: "contain" }} />
-            : <Chip label="Lotomania" color="warning" />}
-          <Typography variant="h5" fontWeight={900}>Lotomania</Typography>
-        </Stack>
-
-        {/* AVISO */}
-        <Paper variant="outlined" sx={{ p: { xs: 2, md: 3 }, mb: 3, borderColor: "rgba(255,255,255,0.12)" }}>
-          <Typography sx={{ fontWeight: 800, mb: 0.5 }}>
-            📢 Como funciona o sorteio?
-          </Typography>
-          <Typography sx={{ opacity: 0.9 }}>
-            O sorteio ocorrerá com base na <strong>Lotomania</strong> assim que <strong>todos os números</strong> do
-            quadro forem vendidos. Utilizaremos o <strong>próximo sorteio posterior</strong> ao fechamento da tabela. O Vencedor será o comprador do ultimo número sorteado.
-          </Typography>
-        </Paper>
-
-        {/* GRID infoprodutos */}
-        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)", md: "repeat(3, 1fr)" }, gap: 2.5 }}>
-          {(loading ? Array.from({ length: 3 }) : cards).map((row, idx) => {
-            const p = row?.product || {};
-            const d = row?.draw || {};
-            const prize = ((p.prize_cents ?? p.default_prize_cents ?? d?.prize_cents ?? 0) / 100);
-            const price = ((d?.ticket_price_cents ?? p.price_cents ?? 0) / 100);
-            const cover = resolveCoverUrl(p.cover_url);
-
-            return (
-              <Card key={p.id || idx} variant="outlined" sx={{ display: "flex", flexDirection: "column" }}>
-                <Box
-                  sx={{
-                    position: "relative", aspectRatio: "16 / 9", borderBottom: "1px solid rgba(255,255,255,0.06)",
-                    background: cover
-                      ? `url(${cover}) center/cover no-repeat`
-                      : "repeating-linear-gradient(135deg, rgba(255,255,255,0.06) 0 8px, rgba(255,255,255,0.03) 8px 16px)",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                  }}
-                >
-                  {!cover && (
-                    <Typography sx={{ opacity: 0.65, fontWeight: 700 }}>
-                      Espaço para a <strong>arte do e-book</strong>
-                    </Typography>
-                  )}
-                </Box>
-
-                <CardContent sx={{ flex: 1 }}>
-                  <Typography variant="overline" sx={{ opacity: 0.8 }}>{p.subtitle || "Infoproduto"}</Typography>
-                  <Typography variant="h6" fontWeight={900}>{p.title || "E-book"}</Typography>
-
-                  <Typography variant="h4" sx={{ mt: 1, fontWeight: 900 }}>
-                    {BRL.format(prize)}{" "}
-                    <Typography component="span" variant="body1" sx={{ opacity: 0.8 }}>de prêmio</Typography>
-                  </Typography>
-
-                  <Typography variant="h6" sx={{ mt: 0.5 }}>
-                    {BRL.format(price)}{" "}
-                    <Typography component="span" variant="body2" sx={{ opacity: 0.8 }}>/ 1 número</Typography>
-                  </Typography>
-
-                  <Typography variant="body2" sx={{ mt: 1.5, opacity: 0.9 }}>
-                    {p.description || "Compre o e-book e escolha 1 número entre os 100 disponíveis."}
-                  </Typography>
-
-                  {d?.total_numbers ? (
-                    <Box sx={{ mt: 2 }}>
-                      <ProgressNumbers total={d.total_numbers ?? 100} reserved={d.reserved ?? 0} sold={d.sold ?? 0} />
-                    </Box>
-                  ) : null}
-                </CardContent>
-
-                <CardActions sx={{ p: 2, pt: 0, flexDirection: "column", alignItems: "stretch", gap: 1 }}>
-                  <Button
-                    fullWidth size="large" color="success" variant="contained" disabled={loading}
-                    onClick={() => onBuyClick(p, d?.ticket_price_cents ?? p.price_cents)} sx={{ fontWeight: 900 }}
-                  >
-                    {isAuthenticated ? "Entrar para comprar" : "Entrar para comprar"}
-                  </Button>
-
-                  {d?.id ? <NumbersMiniBoard drawId={d.id} productKey={getProductKey(p)} /> : null}
-                </CardActions>
-              </Card>
-            );
-          })}
-        </Box>
+              {otherCards.map((row, idx) => (
+                <ProductCard
+                  key={row?.product?.id || idx}
+                  row={row}
+                  loading={false}
+                  onBuy={onBuyClick}
+                  isAuthenticated={isAuthenticated}
+                />
+              ))}
+            </Box>
+          </>
+        ) : null}
 
         {/* CTA WhatsApp */}
         <Paper
@@ -786,6 +1150,44 @@ export default function HomePage({ groupUrl = "https://chat.whatsapp.com/Byb4qBR
           </Button>
         </Paper>
       </Container>
+
+      {!loading && featured ? (
+        <Box
+          sx={{
+            display: { xs: "block", md: "none" },
+            position: "fixed",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            zIndex: 1200,
+            p: 1.5,
+            bgcolor: "rgba(14,14,14,0.95)",
+            borderTop: "1px solid rgba(255,255,255,0.1)",
+            backdropFilter: "blur(12px)",
+          }}
+        >
+          <Stack direction="row" spacing={1.5} alignItems="center">
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography variant="caption" sx={{ opacity: 0.8, fontWeight: 700 }}>
+                Prêmio
+              </Typography>
+              <Typography variant="subtitle1" sx={{ fontWeight: 900, color: "secondary.main", lineHeight: 1.1 }}>
+                {BRL.format(getPrizeCents(featured.product, featured.draw) / 100)}
+              </Typography>
+            </Box>
+            <Button
+              color="success"
+              variant="contained"
+              onClick={() =>
+                onBuyClick(featured.product, getPriceCents(featured.product, featured.draw))
+              }
+              sx={{ fontWeight: 900, px: 2.5, whiteSpace: "nowrap" }}
+            >
+              {isAuthenticated ? "Comprar" : "Participar"}
+            </Button>
+          </Stack>
+        </Box>
+      ) : null}
 
       {/* Rodapé */}
       <Footer />
