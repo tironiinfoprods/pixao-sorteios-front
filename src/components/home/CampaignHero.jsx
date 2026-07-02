@@ -1,10 +1,12 @@
 import * as React from "react";
-import { Box, Button, Stack, Typography, Skeleton } from "@mui/material";
+import { Link as RouterLink } from "react-router-dom";
+import { Box, Button, Link, Stack, Typography, Skeleton } from "@mui/material";
 import heroImage from "../../hero_image.png";
 import lotomaniaLogo from "../../lotomania-logo.png";
 import { campaignColors, goldButtonSx, greenButtonSx } from "../../theme/campaignTheme";
 import { BRL, getTopPrizes } from "../../utils/homeHelpers";
 import { trackEvent, AnalyticsEvents } from "../../utils/analytics";
+import PlanQuickNav from "./PlanQuickNav";
 
 const FALLBACK_PRIZES = [
   { label: "Prêmio principal", amount: 10000, rank: 1 },
@@ -112,7 +114,7 @@ function SecondaryPrizeCard({ label, amount, loading }) {
   );
 }
 
-export default function CampaignHero({ loading, cards, onScrollToPlans, onScrollToHowItWorks }) {
+export default function CampaignHero({ loading, cards, isAuthenticated, onScrollToPlans, onScrollToHowItWorks }) {
   const prizes = loading ? FALLBACK_PRIZES : getTopPrizes(cards, 3);
   const main = prizes[0] || FALLBACK_PRIZES[0];
   const secondary = [
@@ -213,6 +215,8 @@ export default function CampaignHero({ loading, cards, onScrollToPlans, onScroll
           </Stack>
         </Stack>
 
+        <PlanQuickNav cards={cards} loading={loading} />
+
         <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25} sx={{ pt: 0.5 }}>
           <Button
             size="large"
@@ -240,6 +244,30 @@ export default function CampaignHero({ loading, cards, onScrollToPlans, onScroll
             Como funciona
           </Button>
         </Stack>
+
+        {!isAuthenticated ? (
+          <Stack direction="row" spacing={2} justifyContent="center" flexWrap="wrap" useFlexGap sx={{ pt: 0.5 }}>
+            <Link
+              component={RouterLink}
+              to="/cadastro"
+              underline="hover"
+              onClick={() => trackEvent(AnalyticsEvents.CADASTRO_HERO)}
+              sx={{ color: campaignColors.gold, fontWeight: 800, fontSize: "0.9rem" }}
+            >
+              Criar conta grátis
+            </Link>
+            <Typography sx={{ color: campaignColors.textSecondary }}>·</Typography>
+            <Link
+              component={RouterLink}
+              to="/login"
+              underline="hover"
+              onClick={() => trackEvent(AnalyticsEvents.LOGIN_HERO)}
+              sx={{ color: campaignColors.neonGreenSecondary, fontWeight: 700, fontSize: "0.9rem" }}
+            >
+              Já tenho conta
+            </Link>
+          </Stack>
+        ) : null}
       </Stack>
     </Box>
   );

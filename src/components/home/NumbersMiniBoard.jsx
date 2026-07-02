@@ -1,7 +1,9 @@
 import * as React from "react";
-import { Box, Stack, Typography, Skeleton } from "@mui/material";
+import { Box, Button, Collapse, Stack, Typography, Skeleton } from "@mui/material";
+import ExpandMoreRoundedIcon from "@mui/icons-material/ExpandMoreRounded";
 import { loadNumbersForDraw } from "../../utils/homeApi";
 import { campaignColors } from "../../theme/campaignTheme";
+import { trackEvent, AnalyticsEvents } from "../../utils/analytics";
 
 const LEGEND = [
   { label: "Disponível", color: campaignColors.neonGreenSecondary },
@@ -20,17 +22,23 @@ function sxForStatus(st) {
   return { bgcolor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.12)", color: campaignColors.textSecondary };
 }
 
-function computeStats(statusByN) {
-  let available = 0;
-  let reserved = 0;
-  let unavailable = 0;
-  for (let i = 0; i < 100; i++) {
-    const st = String(statusByN[i] || "available").toLowerCase();
-    if (st === "sold" || st === "taken") unavailable++;
-    else if (st === "reserved") reserved++;
-    else available++;
+function computeStats(statusByN, total = 100, reserved = 0, sold = 0) {
+  if (Object.keys(statusByN).length) {
+    let available = 0;
+    let r = 0;
+    let unavailable = 0;
+    for (let i = 0; i < total; i++) {
+      const st = String(statusByN[i] || "available").toLowerCase();
+      if (st === "sold" || st === "taken") unavailable++;
+      else if (st === "reserved") r++;
+      else available++;
+    }
+    return { available, reserved: r, unavailable };
   }
-  return { available, reserved, unavailable };
+  const unavailable = sold;
+  const reservedCount = reserved;
+  const available = Math.max(0, total - reservedCount - unavailable);
+  return { available, reserved: reservedCount, unavailable };
 }
 
 function NumbersGrid({ statusByN }) {
@@ -81,17 +89,22 @@ function NumbersGridSkeleton() {
   );
 }
 
-function NumbersMiniBoardInner({ drawId, productKey, numbers: preloadedNumbers, numbersLoading }) {
+function NumbersMiniBoardInner({
+  drawId,
+  productKey,
+  numbers: preloadedNumbers,
+  total = 100,
+  reserved = 0,
+  sold = 0,
+}) {
+  const [expanded, setExpanded] = React.useState(false);
   const [nums, setNums] = React.useState(preloadedNumbers || []);
-  const [loading, setLoading] = React.useState(numbersLoading !== false && !preloadedNumbers?.length);
+  const [loading, setLoading] = React.useState(false);
 
   React.useEffect(() => {
+    if (!expanded) return undefined;
     if (preloadedNumbers?.length) {
       setNums(preloadedNumbers);
-      setLoading(false);
-      return undefined;
-    }
-    if (numbersLoading === false && !preloadedNumbers) {
       setLoading(false);
       return undefined;
     }
@@ -108,7 +121,7 @@ function NumbersMiniBoardInner({ drawId, productKey, numbers: preloadedNumbers, 
     return () => {
       alive = false;
     };
-  }, [drawId, productKey, preloadedNumbers, numbersLoading]);
+  }, [expanded, drawId, productKey, preloadedNumbers]);
 
   const statusByN = React.useMemo(() => {
     const m = {};
@@ -116,39 +129,71 @@ function NumbersMiniBoardInner({ drawId, productKey, numbers: preloadedNumbers, 
     return m;
   }, [nums]);
 
-  const stats = React.useMemo(() => computeStats(statusByN), [statusByN]);
+  const stats = React.useMemo(
+    () => computeStats(statusByN, total, reserved, sold),
+    [statusByN, total, reserved, sold]
+  );
+
+  const handleExpand = () => {
+    trackEvent(AnalyticsEvents.EXPAND_NUMBERS, { drawId, productKey });
+    setExpanded(true);
+  };
 
   return (
-    <Box
-      sx={{
-        mt: 1.5,
-        p: { xs: 1.25, sm: 1.5 },
-        borderRadius: 1.5,
-        bgcolor: "rgba(3,7,3,0.5)",
-        border: "1px solid rgba(255,255,255,0.06)",
-      }}
-    >
-      <Typography variant="body2" sx={{ fontWeight: 700, color: campaignColors.textPrimary, mb: 0.5, fontSize: "0.85rem" }}>
-        Veja os números disponíveis abaixo
-      </Typography>
-      <Typography variant="caption" sx={{ color: campaignColors.textSecondary, display: "block", mb: 1.25 }}>
-        {loading
-          ? "Carregando tabela…"
-          : `${stats.available} disponíveis · ${stats.reserved} reservados · ${stats.unavailable} indisponíveis`}
-      </Typography>
+    <Box sx={{ mt: 1.5 }}>
+      {!expanded ? (
+        <Button
+          fullWidth
+          variant="outlined"
+          size="small"
+          onClick={handleExpand}
+          endIcon={<ExpandMoreRoundedIcon />}
+          sx={{
+            py: 1,
+            borderColor: "rgba(255,255,255,0.12)",
+            color: campaignColors.textSecondary,
+            fontWeight: 700,
+            fontSize: "0.8rem",
+            "&:hover": { borderColor: campaignColors.borderNeon, bgcolor: "rgba(57,255,20,0.04)" },
+          }}
+        >
+          Ver tabela de números · ~{stats.available} disponíveis
+        </Button>
+      ) : null}
 
-      <Stack direction="row" spacing={1} sx={{ mb: 1.25, flexWrap: "wrap" }} aria-label="Legenda">
-        {LEGEND.map((item) => (
-          <Stack key={item.label} direction="row" spacing={0.5} alignItems="center">
-            <Box sx={{ width: 10, height: 10, borderRadius: "50%", bgcolor: item.color }} />
-            <Typography variant="caption" sx={{ color: campaignColors.textSecondary, fontSize: "0.7rem" }}>
-              {item.label}
-            </Typography>
+      <Collapse in={expanded} unmountOnExit>
+        <Box
+          sx={{
+            mt: expanded ? 0 : 1.5,
+            p: { xs: 1.25, sm: 1.5 },
+            borderRadius: 1.5,
+            bgcolor: "rgba(3,7,3,0.5)",
+            border: "1px solid rgba(255,255,255,0.06)",
+          }}
+        >
+          <Typography variant="body2" sx={{ fontWeight: 700, color: campaignColors.textPrimary, mb: 0.5, fontSize: "0.85rem" }}>
+            Números disponíveis
+          </Typography>
+          <Typography variant="caption" sx={{ color: campaignColors.textSecondary, display: "block", mb: 1.25 }}>
+            {loading
+              ? "Carregando tabela…"
+              : `${stats.available} disponíveis · ${stats.reserved} reservados · ${stats.unavailable} indisponíveis`}
+          </Typography>
+
+          <Stack direction="row" spacing={1} sx={{ mb: 1.25, flexWrap: "wrap" }} aria-label="Legenda">
+            {LEGEND.map((item) => (
+              <Stack key={item.label} direction="row" spacing={0.5} alignItems="center">
+                <Box sx={{ width: 10, height: 10, borderRadius: "50%", bgcolor: item.color }} />
+                <Typography variant="caption" sx={{ color: campaignColors.textSecondary, fontSize: "0.7rem" }}>
+                  {item.label}
+                </Typography>
+              </Stack>
+            ))}
           </Stack>
-        ))}
-      </Stack>
 
-      {loading ? <NumbersGridSkeleton /> : <NumbersGrid statusByN={statusByN} />}
+          {loading ? <NumbersGridSkeleton /> : <NumbersGrid statusByN={statusByN} />}
+        </Box>
+      </Collapse>
     </Box>
   );
 }

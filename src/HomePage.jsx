@@ -31,6 +31,7 @@ import {
 } from "./utils/homeApi";
 import { BRL, scrollToId } from "./utils/homeHelpers";
 import { trackEvent, AnalyticsEvents } from "./utils/analytics";
+import { usePageEngagement } from "./utils/usePageEngagement";
 
 import CampaignHero from "./components/home/CampaignHero";
 import HowItWorksSection from "./components/home/HowItWorksSection";
@@ -114,11 +115,13 @@ export default function HomePage({ groupUrl = "https://chat.whatsapp.com/Byb4qBR
 
   const { loading, cards } = useInfoproductCards("lotomania");
 
+  usePageEngagement();
+
   const [showStickyCta, setShowStickyCta] = React.useState(false);
 
   React.useEffect(() => {
     const onScroll = () => {
-      setShowStickyCta(window.scrollY > 400);
+      setShowStickyCta(window.scrollY > 180);
     };
     window.addEventListener("scroll", onScroll, { passive: true });
     onScroll();
@@ -293,6 +296,7 @@ export default function HomePage({ groupUrl = "https://chat.whatsapp.com/Byb4qBR
       <CampaignHero
         loading={loading}
         cards={cards}
+        isAuthenticated={isAuthenticated}
         onScrollToPlans={scrollToPlans}
         onScrollToHowItWorks={scrollToHowItWorks}
       />
@@ -307,9 +311,9 @@ export default function HomePage({ groupUrl = "https://chat.whatsapp.com/Byb4qBR
           overflow: "hidden",
         }}
       >
-        <HowItWorksSection />
-
         <PlansSection cards={cards} loading={loading} onBuy={onBuyClick} isAuthenticated={isAuthenticated} />
+
+        <HowItWorksSection />
 
         <WinnerRulesBlock />
 

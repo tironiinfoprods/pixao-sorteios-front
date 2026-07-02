@@ -120,6 +120,14 @@ export default function LoginPage() {
     dlog("mounted. API base ~", apiJoin("/").replace(/\/+$/, ""));
   }, []);
 
+  React.useEffect(() => {
+    if (location.state?.openForgot) {
+      setForgotEmail(location.state?.email || "");
+      setForgotOpen(true);
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location.pathname, location.state, navigate]);
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />

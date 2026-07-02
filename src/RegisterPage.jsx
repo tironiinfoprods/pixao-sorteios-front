@@ -23,9 +23,12 @@ import {
   DialogActions,
   Divider,
   Link,
+  Alert,
 } from '@mui/material';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import AccountCircleRoundedIcon from '@mui/icons-material/AccountCircleRounded';
+import { useAuth } from './authContext';
+import { mapRegisterError, isDuplicateAccountError } from './utils/registerErrors';
 
 const theme = createTheme({
   palette: {
@@ -40,47 +43,6 @@ const theme = createTheme({
     fontFamily: ['Inter', 'system-ui', 'Segoe UI', 'Roboto', 'Arial'].join(','),
   },
 });
-
-/* ================= API helpers ================= */
-const RAW =
-  process.env.REACT_APP_API_BASE ||
-  process.env.REACT_APP_API_BASE_URL ||
-  'https://newstore-backend.onrender.com';
-
-const ROOT = String(RAW).replace(/\/+$/, '');
-const API_BASE = /\/api$/i.test(ROOT) ? ROOT : `${ROOT}/api`;
-
-function apiUrl(path) {
-  let p = path.startsWith('/') ? path : `/${path}`;
-  if (API_BASE.endsWith('/api') && p.startsWith('/api/')) p = p.slice(4);
-  return `${API_BASE}${p}`;
-}
-
-async function postJson(path, body) {
-  const res = await fetch(apiUrl(path), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify(body),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || data.message || `HTTP ${res.status}`);
-  return data;
-}
-
-async function registerRequest(payload) {
-  // prioriza o novo /register
-  const paths = ['/register', '/auth/register', '/users/register'];
-  let lastErr;
-  for (const p of paths) {
-    try {
-      return await postJson(p, payload);
-    } catch (e) {
-      lastErr = e;
-    }
-  }
-  throw lastErr || new Error('Falha ao registrar');
-}
 
 /* ================= Utils & Validators ================= */
 const emailOk = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(String(v).trim());
@@ -284,6 +246,7 @@ function PrivacyContent() {
 /* ===================== Página ===================== */
 export default function RegisterPage() {
   const navigate = useNavigate();
+  const { register } = useAuth();
 
   const [form, setForm] = React.useState({
     name: '',
@@ -296,6 +259,8 @@ export default function RegisterPage() {
   });
 
   const [errors, setErrors] = React.useState({});
+  const [submitError, setSubmitError] = React.useState('');
+  const [duplicateAccount, setDuplicateAccount] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
 
   const [openTerms, setOpenTerms] = React.useState(false);
@@ -333,6 +298,8 @@ export default function RegisterPage() {
     if (!validateAll()) return;
 
     setLoading(true);
+    setSubmitError('');
+    setDuplicateAccount(false);
     try {
       const payload = {
         name: String(form.name || '').trim(),
@@ -343,11 +310,11 @@ export default function RegisterPage() {
         password: String(form.password || ''),
         acceptTerms: !!form.acceptTerms,
       };
-      await registerRequest(payload);
-      alert('Conta criada com sucesso! Agora faça login.');
-      navigate('/login');
+      await register(payload, true);
+      navigate('/', { replace: true });
     } catch (err) {
-      alert(err.message || 'Falha ao criar conta');
+      setSubmitError(mapRegisterError(err));
+      setDuplicateAccount(isDuplicateAccountError(err));
     } finally {
       setLoading(false);
     }
@@ -391,6 +358,28 @@ export default function RegisterPage() {
 
             <Box component="form" onSubmit={handleSubmit} noValidate>
               <Stack spacing={2}>
+                {submitError ? (
+                  <Alert severity={duplicateAccount ? 'warning' : 'error'}>
+                    {submitError}
+                    {duplicateAccount ? (
+                      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mt: 1.5 }}>
+                        <Button component={RouterLink} to="/login" variant="outlined" size="small">
+                          Ir para login
+                        </Button>
+                        <Button
+                          component={RouterLink}
+                          to="/login"
+                          state={{ openForgot: true, email: form.email }}
+                          variant="text"
+                          size="small"
+                        >
+                          Esqueci minha senha
+                        </Button>
+                      </Stack>
+                    ) : null}
+                  </Alert>
+                ) : null}
+
                 <TextField
                   label="Nome completo"
                   name="name"

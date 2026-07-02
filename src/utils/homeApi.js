@@ -93,18 +93,18 @@ function buildPlaceholderDraw(p) {
     sold: 0,
     ticket_price_cents: p?.price_cents ?? 0,
     numbers: null,
-    numbersLoading: true,
+    numbersLoading: false,
   };
 }
 
-function mapDrawFromResponse(p, j) {
+function mapDrawFromResponse(p, j, { includeNumbers = false } = {}) {
   const d = j?.draw;
   if (!d) return null;
 
   const counts = d.counts || {};
   const reserved = Number(counts.reserved || 0);
   const sold = Number(counts.sold || 0) + Number(counts.taken || 0);
-  const numbers = normalizeNumbersList(j?.numbers);
+  const numbers = includeNumbers ? normalizeNumbersList(j?.numbers) : null;
 
   return {
     id: d.id,
@@ -131,7 +131,7 @@ async function findOpenDrawForProduct(p, { includeNumbers = true } = {}) {
 
   try {
     const j = await fetchJSON(`${API_BASE}/api/infoproducts/${encodeURIComponent(key)}/open-draw${qs}`);
-    const mapped = mapDrawFromResponse(p, j);
+    const mapped = mapDrawFromResponse(p, j, { includeNumbers });
     if (mapped) {
       setCached(cacheKey, mapped);
       return mapped;
@@ -155,8 +155,8 @@ async function findOpenDrawForProduct(p, { includeNumbers = true } = {}) {
       ticket_price_cents: chosen.ticket_price_cents_override ?? chosen.ticket_price_cents ?? p?.price_cents ?? 0,
       reserved: Number(chosen.reserved || 0),
       sold: Number(chosen.sold || chosen.taken || 0),
-      numbers: null,
-      numbersLoading: includeNumbers,
+      numbers: includeNumbers ? null : null,
+      numbersLoading: false,
     };
     setCached(cacheKey, mapped);
     return mapped;
@@ -199,7 +199,7 @@ export function useInfoproductCards(categorySlug = "lotomania") {
         const enriched = await Promise.all(
           items.map(async (p) => {
             try {
-              const d = await findOpenDrawForProduct(p, { includeNumbers: true });
+              const d = await findOpenDrawForProduct(p, { includeNumbers: false });
               return buildCardRow(p, d);
             } catch {
               return buildCardRow(p, null);

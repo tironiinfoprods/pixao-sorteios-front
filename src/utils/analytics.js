@@ -25,4 +25,8 @@ export const AnalyticsEvents = {
   CHECKOUT_START: "checkout_start",
   SELECTION_ERROR: "selection_error",
   STICKY_CTA: "click_sticky_cta",
+  EXPAND_NUMBERS: "expand_numbers_board",
+  QUICK_PLAN_NAV: "click_quick_plan",
+  CADASTRO_HERO: "click_cadastro_hero",
+  LOGIN_HERO: "click_login_hero",
 };

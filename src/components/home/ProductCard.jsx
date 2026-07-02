@@ -89,6 +89,7 @@ export default function ProductCard({ row, loading, onBuy, isAuthenticated, tier
 
   return (
     <Card
+      id={p.id ? `plano-${p.id}` : undefined}
       elevation={0}
       sx={{
         position: "relative",
@@ -170,7 +171,9 @@ export default function ProductCard({ row, loading, onBuy, isAuthenticated, tier
             drawId={d.id}
             productKey={getProductKey(p)}
             numbers={d.numbers}
-            numbersLoading={d.numbersLoading}
+            total={d.total_numbers ?? 100}
+            reserved={d.reserved ?? 0}
+            sold={d.sold ?? 0}
           />
         ) : null}
 

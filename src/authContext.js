@@ -171,8 +171,56 @@ export function AuthProvider({ children }) {
     setTokenState("");
   }
 
+  async function register(payload, remember = true) {
+    const url = apiJoin("/auth/register");
+    dlog("register(): POST", url);
+
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(payload),
+    });
+
+    dlog("register(): status", r.status);
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      dlog("register(): erro body", data);
+      const err = new Error(data?.error || data?.message || "register_failed");
+      err.code = data?.error;
+      err.status = r.status;
+      throw err;
+    }
+
+    const tk = data?.token || data?.access_token || data?.jwt;
+    dlog("register(): token recebido?", !!tk, tk && sanit(tk));
+    if (!tk) return data?.user || data;
+
+    saveToken(tk, remember);
+    setTokenState(readToken());
+
+    let me = data?.user || null;
+    if (!me) {
+      try {
+        const meUrl = apiJoin("/me");
+        const m = await fetch(meUrl, {
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${tk}` },
+          credentials: "include",
+        });
+        if (m.ok) {
+          const body = await m.json().catch(() => null);
+          me = body?.user || body || null;
+        }
+      } catch (e) {
+        dlog("register(): /me error", e?.message || e);
+      }
+    }
+    setUser(me);
+    return me;
+  }
+
   const value = useMemo(
-    () => ({ user, token, loading, login, logout }),
+    () => ({ user, token, loading, login, logout, register }),
     [user, token, loading]
   );
 
