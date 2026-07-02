@@ -37,6 +37,7 @@ import {
   CardMedia,
 } from "@mui/material";
 import AccountCircleRoundedIcon from "@mui/icons-material/AccountCircleRounded";
+import { trackEvent, AnalyticsEvents } from "./utils/analytics";
 
 const theme = createTheme({
   palette: {
@@ -263,6 +264,7 @@ export default function NumbersPage({
   const navigate = useNavigate();
   const location = useLocation();
   const routeDrawId = location?.state?.drawId ?? null;
+  const routeProduct = location?.state?.product ?? null;
 
   const { selecionados, setSelecionados, limparSelecao } = React.useContext(SelectionContext);
   const { user, token, logout } = useAuth();
@@ -427,6 +429,7 @@ export default function NumbersPage({
   // Seleção com limite = vouchers.remaining
   const [successOpen, setSuccessOpen] = React.useState(false);
   const [successMsg, setSuccessMsg] = React.useState("");
+  const [lastSelected, setLastSelected] = React.useState(null);
   const maxSelectPerClick = 10; // apenas UX
 
   const handleClickNumero = (n) => {
@@ -435,15 +438,24 @@ export default function NumbersPage({
 
     setSelecionados((prev) => {
       const already = prev.includes(n);
-      if (already) return prev.filter((x) => x !== n);
+      if (already) {
+        setLastSelected(null);
+        return prev.filter((x) => x !== n);
+      }
 
       const remaining = Number.isFinite(vouchers.remaining) ? vouchers.remaining : 0;
       if (remaining <= prev.length) {
+        trackEvent(AnalyticsEvents.SELECTION_ERROR, { reason: "voucher_limit", number: n });
         setSuccessMsg("Você atingiu seu limite de números disponíveis neste sorteio.");
         setSuccessOpen(true);
         return prev;
       }
-      if (prev.length >= maxSelectPerClick) return prev;
+      if (prev.length >= maxSelectPerClick) {
+        trackEvent(AnalyticsEvents.SELECTION_ERROR, { reason: "max_per_selection", number: n });
+        return prev;
+      }
+      trackEvent(AnalyticsEvents.NUMBER_SELECT, { number: n, totalSelected: prev.length + 1 });
+      setLastSelected(n);
       return [...prev, n];
     });
   };
@@ -518,37 +530,41 @@ export default function NumbersPage({
       return {
         border: "2px solid",
         borderColor: "error.main",
-        bgcolor: "rgba(211,47,47,0.15)",
-        color: "grey.300",
+        bgcolor: "rgba(211,47,47,0.3)",
+        color: "#fff",
         cursor: "not-allowed",
-        opacity: 0.85,
+        opacity: 0.9,
       };
     }
-    // Reservado (por outro): não clicável
     if (reservadosAll.includes(n) && !selecionados.includes(n)) {
       return {
         border: "2px solid",
         borderColor: "secondary.main",
-        bgcolor: "rgba(255,193,7,0.12)",
-        color: "grey.300",
+        bgcolor: "rgba(255,193,7,0.25)",
+        color: "#fff",
         cursor: "not-allowed",
         opacity: 0.95,
       };
     }
-    // Selecionado (meu)
     if (selecionados.includes(n)) {
       return {
         border: "2px solid",
         borderColor: "secondary.main",
-        bgcolor: "rgba(255,193,7,0.12)",
+        bgcolor: "rgba(255,193,7,0.35)",
+        color: "#050805",
+        boxShadow: "0 0 12px rgba(255,193,7,0.35)",
+        transform: lastSelected === n ? "scale(1.05)" : "scale(1)",
+        transition: "transform 0.2s ease, box-shadow 0.2s ease",
       };
     }
     return {
-      border: "2px solid rgba(255,255,255,0.08)",
-      bgcolor: "primary.main",
-      color: "#0E0E0E",
-      "&:hover": { filter: "brightness(0.95)" },
-      transition: "filter 120ms ease",
+      border: "2px solid",
+      borderColor: "primary.light",
+      bgcolor: "rgba(103,194,58,0.35)",
+      color: "#fff",
+      minHeight: { xs: 36, sm: 32 },
+      "&:hover": { bgcolor: "rgba(103,194,58,0.5)" },
+      transition: "background-color 120ms ease, transform 120ms ease",
     };
   };
 
@@ -630,6 +646,18 @@ export default function NumbersPage({
             </Box>
 
             <Stack
+              direction="row"
+              spacing={1}
+              sx={{ mb: 2, flexWrap: "wrap", position: "sticky", top: 64, zIndex: 10, py: 1, bgcolor: "background.paper", borderRadius: 1 }}
+              aria-label="Legenda dos números"
+            >
+              <Chip size="small" label="Disponível" sx={{ bgcolor: "rgba(103,194,58,0.35)", border: "2px solid #7CFF4D", color: "#fff", fontWeight: 700 }} />
+              <Chip size="small" label="Reservado" sx={{ bgcolor: "rgba(255,193,7,0.25)", border: "2px solid #FFC107", color: "#fff", fontWeight: 700 }} />
+              <Chip size="small" label="Indisponível" sx={{ bgcolor: "rgba(211,47,47,0.3)", border: "2px solid #EF5350", color: "#fff", fontWeight: 700 }} />
+              <Chip size="small" label="Selecionado" sx={{ bgcolor: "rgba(255,193,7,0.35)", border: "2px solid #FFD54F", color: "#050805", fontWeight: 700 }} />
+            </Stack>
+
+            <Stack
               direction={{ xs: "column", md: "row" }}
               spacing={1.5}
               alignItems="center"
@@ -637,27 +665,20 @@ export default function NumbersPage({
               sx={{ mb: 2 }}
             >
               <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap">
-                <Chip size="small" label="DISPONÍVEL" sx={{ bgcolor: "primary.main", color: "#0E0E0E", fontWeight: 700 }} />
-                <Chip
-                  size="small"
-                  label="RESERVADO"
-                  sx={{ bgcolor: "rgba(255,193,7,0.18)", border: "1px solid", borderColor: "secondary.main", color: "secondary.main", fontWeight: 700 }}
-                />
-                <Chip
-                  size="small"
-                  label="INDISPONÍVEL"
-                  sx={{ bgcolor: "rgba(211,47,47,0.18)", border: "1px solid", borderColor: "error.main", color: "error.main", fontWeight: 700 }}
-                />
-                <Typography variant="body2" sx={{ ml: 0.5, opacity: 0.9 }}>
+                <Typography variant="body2" sx={{ ml: 0.5, opacity: 0.9, fontWeight: 700 }}>
                   {Number.isFinite(vouchers.remaining)
-                    ? `• Você pode escolher ${vouchers.remaining} número(s) agora`
+                    ? `Você pode escolher ${vouchers.remaining} número(s) agora`
                     : ""}
                 </Typography>
-                {!!selecionados.length && (
-                  <Typography variant="body2" sx={{ ml: 1, opacity: 0.8 }}>
-                    • {selecionados.length} selecionado(s)
-                  </Typography>
-                )}
+                <Typography
+                  variant="body1"
+                  sx={{
+                    fontWeight: 900,
+                    color: selecionados.length ? "secondary.main" : "text.secondary",
+                  }}
+                >
+                  Você selecionou {selecionados.length} número(s)
+                </Typography>
               </Stack>
 
               <Stack direction="row" spacing={1.5}>
@@ -670,6 +691,30 @@ export default function NumbersPage({
               </Stack>
             </Stack>
 
+            {selecionados.length > 0 ? (
+              <Paper
+                variant="outlined"
+                sx={{
+                  mb: 2,
+                  p: 1.5,
+                  borderColor: "rgba(255,213,79,0.35)",
+                  bgcolor: "rgba(255,193,7,0.06)",
+                }}
+              >
+                <Typography variant="caption" sx={{ opacity: 0.85, display: "block", mb: 0.5 }}>
+                  Resumo da seleção
+                </Typography>
+                {routeProduct?.title ? (
+                  <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.5 }}>
+                    Plano: {routeProduct.title}
+                  </Typography>
+                ) : null}
+                <Typography variant="body2" sx={{ fontWeight: 800 }}>
+                  Números: {selecionados.slice().sort((a, b) => a - b).map(pad2).join(", ")}
+                </Typography>
+              </Paper>
+            ) : null}
+
             {/* Grid 10x10 */}
             <Box sx={{ width: { xs: "calc(100vw - 32px)", sm: "calc(100vw - 64px)", md: "100%" }, maxWidth: 640, aspectRatio: "1 / 1", mx: "auto" }}>
               <Box
@@ -677,7 +722,7 @@ export default function NumbersPage({
                   display: "grid",
                   gridTemplateColumns: "repeat(10, minmax(0, 1fr))",
                   gridTemplateRows: "repeat(10, minmax(0, 1fr))",
-                  gap: { xs: 1, md: 1.2 },
+                  gap: { xs: 1.1, md: 1.2 },
                   height: "100%",
                   width: "100%",
                   boxSizing: "border-box",
@@ -691,6 +736,7 @@ export default function NumbersPage({
                     <Box
                       key={idx}
                       onClick={() => handleClickNumero(idx)}
+                      className={selecionados.includes(idx) && lastSelected === idx ? "number-selected-pulse" : undefined}
                       sx={{
                         ...getCellSx(idx),
                         borderRadius: 1.2,

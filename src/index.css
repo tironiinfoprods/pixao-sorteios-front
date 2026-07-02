@@ -1,13 +1,71 @@
+:root {
+  --campaign-bg: #050805;
+  --campaign-neon: #67c23a;
+  --campaign-gold: #ffc107;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  font-family: Inter, system-ui, "Segoe UI", Roboto, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  background-color: var(--campaign-bg);
 }
 
 code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+  font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
+}
+
+@keyframes numberPulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(103, 194, 58, 0.5);
+  }
+  50% {
+    transform: scale(1.08);
+    box-shadow: 0 0 12px 2px rgba(103, 194, 58, 0.45);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(103, 194, 58, 0);
+  }
+}
+
+.number-selected-pulse {
+  animation: numberPulse 0.35s ease-out;
+}
+
+@keyframes shimmer {
+  0% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.8;
+  }
+  100% {
+    opacity: 0.4;
+  }
+}
+
+.campaign-shimmer {
+  animation: shimmer 3s ease-in-out infinite;
+}
+
+.sticky-mobile-cta {
+  padding-bottom: calc(12px + var(--safe-bottom));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .number-selected-pulse,
+  .campaign-shimmer {
+    animation: none;
+  }
 }

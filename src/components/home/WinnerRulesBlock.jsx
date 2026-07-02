@@ -1,0 +1,24 @@
+import * as React from "react";
+import { Paper, Typography } from "@mui/material";
+import { campaignColors } from "../../theme/campaignTheme";
+
+export default function WinnerRulesBlock() {
+  return (
+    <Paper
+      elevation={0}
+      sx={{
+        p: { xs: 2, md: 2.5 },
+        mb: { xs: 3, md: 4 },
+        borderRadius: 2.5,
+        border: `1px solid ${campaignColors.borderNeon}`,
+        bgcolor: "rgba(103,194,58,0.04)",
+      }}
+    >
+      <Typography sx={{ fontWeight: 800, mb: 0.75 }}>Como o vencedor é definido</Typography>
+      <Typography variant="body2" sx={{ color: "text.secondary", lineHeight: 1.6 }}>
+        Quando todos os números forem vendidos, usamos o <strong style={{ color: "#fff" }}>próximo sorteio da Lotomania</strong>.
+        O ganhador é quem comprou o <strong style={{ color: "#fff" }}>último número sorteado</strong> entre os 100 da tabela.
+      </Typography>
+    </Paper>
+  );
+}
