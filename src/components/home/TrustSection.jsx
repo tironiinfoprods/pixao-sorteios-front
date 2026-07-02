@@ -1,19 +1,17 @@
 import * as React from "react";
-import { Box, Button, Paper, Stack, Typography } from "@mui/material";
-import VerifiedRoundedIcon from "@mui/icons-material/VerifiedRounded";
-import GavelRoundedIcon from "@mui/icons-material/GavelRounded";
+import { Box, Button, Paper, Typography } from "@mui/material";
 import PixRoundedIcon from "@mui/icons-material/PixRounded";
+import GavelRoundedIcon from "@mui/icons-material/GavelRounded";
 import LanguageRoundedIcon from "@mui/icons-material/LanguageRounded";
 import WhatsAppIcon from "@mui/icons-material/WhatsApp";
 import { campaignColors } from "../../theme/campaignTheme";
 import { trackEvent, AnalyticsEvents } from "../../utils/analytics";
 
 const ITEMS = [
-  { icon: VerifiedRoundedIcon, title: "Sorteio transparente", desc: "Resultado pela Lotomania, com regras claras." },
-  { icon: GavelRoundedIcon, title: "Regras disponíveis", desc: "Termos e regulamento acessíveis no site." },
-  { icon: PixRoundedIcon, title: "Pagamento via Pix", desc: "Confirmação rápida e segura." },
-  { icon: LanguageRoundedIcon, title: "Acompanhamento pelo site", desc: "Veja status da sua participação na área do cliente." },
-  { icon: WhatsAppIcon, title: "Suporte pelo WhatsApp", desc: "Tire dúvidas com nossa equipe." },
+  { icon: PixRoundedIcon, title: "Pagamento via Pix" },
+  { icon: GavelRoundedIcon, title: "Regras disponíveis" },
+  { icon: LanguageRoundedIcon, title: "Acompanhamento pelo site" },
+  { icon: WhatsAppIcon, title: "Suporte pelo WhatsApp" },
 ];
 
 export default function TrustSection({ supportUrl = "https://wa.me/554396717931" }) {
@@ -22,20 +20,27 @@ export default function TrustSection({ supportUrl = "https://wa.me/554396717931"
   };
 
   return (
-    <Box component="section" aria-label="Confiança e transparência" sx={{ mb: { xs: 3, md: 4 } }}>
-      <Typography variant="h5" sx={{ fontWeight: 900, mb: 0.5 }}>
-        Transparência e confiança
-      </Typography>
-      <Typography variant="body2" sx={{ color: "text.secondary", mb: 2.5 }}>
-        Informações claras para você participar com segurança.
+    <Box
+      component="section"
+      aria-label="Transparência"
+      sx={{
+        mb: { xs: 2.5, md: 4 },
+        p: { xs: 2, sm: 2.5 },
+        borderRadius: 2,
+        bgcolor: campaignColors.bgPaper,
+        border: "1px solid rgba(255,255,255,0.06)",
+      }}
+    >
+      <Typography variant="h5" sx={{ fontWeight: 900, mb: 0.75, fontSize: { xs: "1.15rem", sm: "1.35rem" } }}>
+        Transparência para participar com segurança
       </Typography>
 
       <Box
         sx={{
           display: "grid",
-          gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)", lg: "repeat(3, 1fr)" },
-          gap: 2,
-          mb: 3,
+          gridTemplateColumns: { xs: "1fr 1fr", sm: "repeat(4, 1fr)" },
+          gap: 1.25,
+          mb: 2.5,
         }}
       >
         {ITEMS.map((item) => {
@@ -45,47 +50,43 @@ export default function TrustSection({ supportUrl = "https://wa.me/554396717931"
               key={item.title}
               elevation={0}
               sx={{
-                p: 2,
-                borderRadius: 2.5,
-                border: `1px solid ${campaignColors.borderNeon}`,
-                bgcolor: "rgba(103,194,58,0.03)",
+                p: 1.5,
+                borderRadius: 1.5,
+                border: "1px solid rgba(255,255,255,0.08)",
+                bgcolor: "rgba(3,7,3,0.5)",
+                textAlign: "center",
               }}
             >
-              <Stack direction="row" spacing={1.5} alignItems="flex-start">
-                <Icon sx={{ color: "primary.main", fontSize: 28, mt: 0.25 }} />
-                <Box>
-                  <Typography sx={{ fontWeight: 800, mb: 0.25 }}>{item.title}</Typography>
-                  <Typography variant="body2" sx={{ color: "text.secondary", lineHeight: 1.45 }}>
-                    {item.desc}
-                  </Typography>
-                </Box>
-              </Stack>
+              <Icon sx={{ color: campaignColors.gold, fontSize: 28, mb: 0.75 }} />
+              <Typography sx={{ fontWeight: 700, fontSize: "0.8rem", lineHeight: 1.3 }}>
+                {item.title}
+              </Typography>
             </Paper>
           );
         })}
       </Box>
 
-      <Box sx={{ textAlign: { xs: "center", sm: "left" } }}>
-        <Button
-          component="a"
-          href={supportUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          variant="outlined"
-          size="large"
-          startIcon={<WhatsAppIcon />}
-          onClick={handleSupport}
-          sx={{
-            fontWeight: 800,
-            borderColor: "#25D366",
-            color: "#25D366",
-            px: 3,
-            "&:hover": { borderColor: "#1ebe57", bgcolor: "rgba(37,211,102,0.08)" },
-          }}
-        >
-          Falar no WhatsApp
-        </Button>
-      </Box>
+      <Button
+        component="a"
+        href={supportUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        variant="outlined"
+        size="large"
+        fullWidth
+        startIcon={<WhatsAppIcon />}
+        onClick={handleSupport}
+        sx={{
+          fontWeight: 800,
+          borderColor: "#25D366",
+          color: "#25D366",
+          maxWidth: { sm: 360 },
+          minHeight: 48,
+          "&:hover": { borderColor: "#1ebe57", bgcolor: "rgba(37,211,102,0.08)" },
+        }}
+      >
+        Falar no WhatsApp
+      </Button>
     </Box>
   );
 }

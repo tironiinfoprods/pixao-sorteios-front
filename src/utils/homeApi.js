@@ -1,4 +1,5 @@
 import * as React from "react";
+import { getCached, setCached } from "./requestCache";
 
 export const API_BASE = (
   process.env.REACT_APP_API_BASE_URL ||
@@ -72,48 +73,108 @@ export async function confirmPurchaseAndGrantVoucher({ paymentId, infoproduct_id
   return r.json().catch(() => ({}));
 }
 
-async function findOpenDrawForProduct(p) {
+function normalizeNumbersList(list) {
+  return (list || [])
+    .map((it) => ({
+      n: Number(it?.n ?? it?.number ?? it?.idx ?? 0),
+      status: String(it?.status ?? it?.state ?? "available"),
+    }))
+    .filter((x) => Number.isFinite(x.n) && x.n >= 0 && x.n < 100);
+}
+
+function buildPlaceholderDraw(p) {
+  const prizeCents = p?.prize_cents ?? p?.default_prize_cents ?? 0;
+  return {
+    id: null,
+    status: "pending",
+    total_numbers: p?.default_total_numbers ?? 100,
+    prize_cents: prizeCents,
+    reserved: 0,
+    sold: 0,
+    ticket_price_cents: p?.price_cents ?? 0,
+    numbers: null,
+    numbersLoading: true,
+  };
+}
+
+function mapDrawFromResponse(p, j) {
+  const d = j?.draw;
+  if (!d) return null;
+
+  const counts = d.counts || {};
+  const reserved = Number(counts.reserved || 0);
+  const sold = Number(counts.sold || 0) + Number(counts.taken || 0);
+  const numbers = normalizeNumbersList(j?.numbers);
+
+  return {
+    id: d.id,
+    status: d.status ?? "open",
+    total_numbers: d.total_numbers ?? 100,
+    prize_cents: d.prize_cents ?? j?.product?.prize_cents ?? p?.prize_cents ?? 0,
+    ticket_price_cents: d.ticket_price_cents_override ?? d.ticket_price_cents ?? p?.price_cents ?? 0,
+    reserved,
+    sold,
+    numbers,
+    numbersLoading: false,
+  };
+}
+
+async function findOpenDrawForProduct(p, { includeNumbers = true } = {}) {
   const key = p?.sku || p?.id;
   if (!key) return null;
 
+  const cacheKey = `open-draw:${key}:${includeNumbers ? "numbers" : "basic"}`;
+  const cached = getCached(cacheKey);
+  if (cached) return cached;
+
+  const qs = includeNumbers ? "?include=numbers" : "";
+
   try {
-    const j = await fetchJSON(`${API_BASE}/api/infoproducts/${encodeURIComponent(key)}/open-draw`);
-    const d = j?.draw;
-    if (!d) return null;
-
-    const counts = d.counts || {};
-    const reserved = Number(counts.reserved || 0);
-    const sold = Number(counts.sold || 0) + Number(counts.taken || 0);
-
-    return {
-      id: d.id,
-      status: d.status ?? "open",
-      total_numbers: d.total_numbers ?? 100,
-      prize_cents: d.prize_cents ?? j?.product?.prize_cents ?? p?.prize_cents ?? 0,
-      ticket_price_cents: d.ticket_price_cents_override ?? d.ticket_price_cents ?? p?.price_cents ?? 0,
-      reserved,
-      sold,
-    };
-  } catch {
-    try {
-      const u = `${API_BASE}/api/draws?infoproduct_id=${encodeURIComponent(p.id)}&status=open`;
-      const j = await fetchJSON(u);
-      const list = Array.isArray(j?.items) ? j.items : Array.isArray(j?.draws) ? j.draws : Array.isArray(j) ? j : [];
-      const chosen = list.slice().sort((a, b) => Number(b?.id || 0) - Number(a?.id || 0))[0];
-      if (!chosen) return null;
-      return {
-        id: chosen.id,
-        status: chosen.status ?? "open",
-        total_numbers: chosen.total_numbers ?? 100,
-        prize_cents: chosen.prize_cents ?? p?.prize_cents ?? 0,
-        ticket_price_cents: chosen.ticket_price_cents_override ?? chosen.ticket_price_cents ?? p?.price_cents ?? 0,
-        reserved: Number(chosen.reserved || 0),
-        sold: Number(chosen.sold || chosen.taken || 0),
-      };
-    } catch {
-      return null;
+    const j = await fetchJSON(`${API_BASE}/api/infoproducts/${encodeURIComponent(key)}/open-draw${qs}`);
+    const mapped = mapDrawFromResponse(p, j);
+    if (mapped) {
+      setCached(cacheKey, mapped);
+      return mapped;
     }
+  } catch {
+    /* fallback legado */
   }
+
+  try {
+    const u = `${API_BASE}/api/draws?infoproduct_id=${encodeURIComponent(p.id)}&status=open`;
+    const j = await fetchJSON(u);
+    const list = Array.isArray(j?.items) ? j.items : Array.isArray(j?.draws) ? j.draws : Array.isArray(j) ? j : [];
+    const chosen = list.slice().sort((a, b) => Number(b?.id || 0) - Number(a?.id || 0))[0];
+    if (!chosen) return null;
+
+    const mapped = {
+      id: chosen.id,
+      status: chosen.status ?? "open",
+      total_numbers: chosen.total_numbers ?? 100,
+      prize_cents: chosen.prize_cents ?? p?.prize_cents ?? 0,
+      ticket_price_cents: chosen.ticket_price_cents_override ?? chosen.ticket_price_cents ?? p?.price_cents ?? 0,
+      reserved: Number(chosen.reserved || 0),
+      sold: Number(chosen.sold || chosen.taken || 0),
+      numbers: null,
+      numbersLoading: includeNumbers,
+    };
+    setCached(cacheKey, mapped);
+    return mapped;
+  } catch {
+    return null;
+  }
+}
+
+function buildCardRow(p, draw) {
+  const prizeCents = (p?.prize_cents ?? p?.default_prize_cents ?? draw?.prize_cents ?? 0) ?? 0;
+  const ticketPriceCents = draw?.ticket_price_cents ?? p?.price_cents ?? 0;
+
+  return {
+    product: p,
+    draw: draw
+      ? { ...draw, prize_cents: draw.prize_cents ?? prizeCents, ticket_price_cents: ticketPriceCents }
+      : buildPlaceholderDraw(p),
+  };
 }
 
 export function useInfoproductCards(categorySlug = "lotomania") {
@@ -122,6 +183,7 @@ export function useInfoproductCards(categorySlug = "lotomania") {
 
   React.useEffect(() => {
     let alive = true;
+
     (async () => {
       try {
         const list = await fetchJSON(
@@ -129,52 +191,31 @@ export function useInfoproductCards(categorySlug = "lotomania") {
         );
         const items = Array.isArray(list?.items) ? list.items : Array.isArray(list) ? list : [];
 
+        if (!alive) return;
+
+        setCards(items.map((p) => buildCardRow(p, null)));
+        setLoading(false);
+
         const enriched = await Promise.all(
           items.map(async (p) => {
             try {
-              const d = await findOpenDrawForProduct(p);
-              const prizeCents = (p?.prize_cents ?? p?.default_prize_cents ?? (d ? d.prize_cents : 0)) ?? 0;
-              const ticketPriceCents = d?.ticket_price_cents ?? p?.price_cents ?? 0;
-
-              return {
-                product: p,
-                draw: d
-                  ? d
-                  : {
-                      id: null,
-                      status: "pending",
-                      total_numbers: p?.default_total_numbers ?? 100,
-                      prize_cents: prizeCents,
-                      reserved: 0,
-                      sold: 0,
-                      ticket_price_cents: ticketPriceCents,
-                    },
-              };
+              const d = await findOpenDrawForProduct(p, { includeNumbers: true });
+              return buildCardRow(p, d);
             } catch {
-              const prizeCents = p?.prize_cents ?? p?.default_prize_cents ?? 0;
-              return {
-                product: p,
-                draw: {
-                  id: null,
-                  status: "pending",
-                  total_numbers: p?.default_total_numbers ?? 100,
-                  prize_cents: prizeCents,
-                  reserved: 0,
-                  sold: 0,
-                  ticket_price_cents: p?.price_cents ?? 0,
-                },
-              };
+              return buildCardRow(p, null);
             }
           })
         );
 
         if (alive) setCards(enriched);
       } catch {
-        if (alive) setCards([]);
-      } finally {
-        if (alive) setLoading(false);
+        if (alive) {
+          setCards([]);
+          setLoading(false);
+        }
       }
     })();
+
     return () => {
       alive = false;
     };
@@ -186,6 +227,18 @@ export function useInfoproductCards(categorySlug = "lotomania") {
 export async function loadNumbersForDraw(drawId, productKey) {
   if (drawId == null) return [];
 
+  const cacheKey = `numbers:${drawId}`;
+  const cached = getCached(cacheKey);
+  if (cached) return cached;
+
+  if (productKey) {
+    const openDrawCache = getCached(`open-draw:${productKey}:numbers`);
+    if (openDrawCache?.numbers?.length) {
+      setCached(cacheKey, openDrawCache.numbers);
+      return openDrawCache.numbers;
+    }
+  }
+
   try {
     const r = await fetch(`${API_BASE}/api/draws/${encodeURIComponent(drawId)}/numbers`, {
       credentials: "include",
@@ -195,9 +248,9 @@ export async function loadNumbersForDraw(drawId, productKey) {
     if (r.ok) {
       const j = await r.json().catch(() => ({}));
       const list = Array.isArray(j) ? j : Array.isArray(j?.numbers) ? j.numbers : Array.isArray(j?.items) ? j.items : [];
-      return list
-        .map((it) => ({ n: Number(it?.n ?? it?.number ?? it?.idx ?? 0), status: String(it?.status ?? it?.state ?? "available") }))
-        .filter((x) => Number.isFinite(x.n) && x.n >= 0 && x.n < 100);
+      const normalized = normalizeNumbersList(list);
+      setCached(cacheKey, normalized);
+      return normalized;
     }
   } catch {
     /* fallback */
@@ -207,10 +260,13 @@ export async function loadNumbersForDraw(drawId, productKey) {
     try {
       const j = await fetchJSON(`${API_BASE}/api/infoproducts/${encodeURIComponent(productKey)}/open-draw?include=numbers`);
       if (Number(j?.draw?.id) === Number(drawId)) {
-        const list = Array.isArray(j?.numbers) ? j.numbers : [];
-        return list
-          .map((it) => ({ n: Number(it?.n), status: String(it?.status || "available") }))
-          .filter((x) => Number.isFinite(x.n) && x.n >= 0 && x.n < 100);
+        const normalized = normalizeNumbersList(j?.numbers);
+        setCached(cacheKey, normalized);
+        setCached(`open-draw:${productKey}:numbers`, {
+          ...mapDrawFromResponse({ id: productKey }, j),
+          numbers: normalized,
+        });
+        return normalized;
       }
     } catch {
       /* ignore */

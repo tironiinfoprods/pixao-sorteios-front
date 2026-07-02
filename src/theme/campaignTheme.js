@@ -1,27 +1,29 @@
 import { createTheme } from "@mui/material/styles";
 
 export const campaignColors = {
-  bg: "#050805",
-  bgPaper: "#0f120f",
-  bgCard: "#141a14",
-  neonGreen: "#67C23A",
-  neonGreenBright: "#7CFF4D",
-  gold: "#FFC107",
-  goldLight: "#FFD54F",
-  textPrimary: "#FFFFFF",
-  textSecondary: "rgba(255,255,255,0.72)",
-  borderNeon: "rgba(103,194,58,0.45)",
-  borderGold: "rgba(255,213,79,0.35)",
+  bg: "#030703",
+  bgPaper: "#071008",
+  bgCard: "#071008",
+  neonGreen: "#39FF14",
+  neonGreenSecondary: "#17C964",
+  gold: "#FFD43B",
+  goldCta: "#FFC400",
+  textPrimary: "#F8F8F8",
+  textSecondary: "#B7B7B7",
+  borderNeon: "rgba(57,255,20,0.28)",
+  borderGold: "rgba(255,212,59,0.45)",
+  reserved: "#FFB020",
+  unavailable: "#FF3B3B",
 };
 
 export const campaignTheme = createTheme({
   palette: {
     mode: "dark",
-    primary: { main: campaignColors.neonGreen, light: campaignColors.neonGreenBright },
-    secondary: { main: campaignColors.gold, light: campaignColors.goldLight },
+    primary: { main: campaignColors.neonGreen, light: campaignColors.neonGreenSecondary },
+    secondary: { main: campaignColors.gold, light: campaignColors.goldCta },
     background: { default: campaignColors.bg, paper: campaignColors.bgPaper },
-    error: { main: "#D32F2F" },
-    success: { main: "#59b15f" },
+    error: { main: campaignColors.unavailable },
+    success: { main: campaignColors.neonGreenSecondary },
     text: {
       primary: campaignColors.textPrimary,
       secondary: campaignColors.textSecondary,
@@ -50,34 +52,33 @@ export const campaignTheme = createTheme({
   },
 });
 
-export const cardSx = {
-  background: `linear-gradient(145deg, ${campaignColors.bgCard} 0%, ${campaignColors.bgPaper} 100%)`,
-  border: `1px solid ${campaignColors.borderNeon}`,
-  borderRadius: 3,
-  boxShadow: "0 8px 32px rgba(0,0,0,0.45), 0 0 24px rgba(103,194,58,0.06)",
-};
-
-export const neonButtonSx = {
-  fontWeight: 900,
-  px: 3,
-  py: 1.4,
-  fontSize: "1rem",
-  boxShadow: "0 4px 24px rgba(103,194,58,0.35)",
-  "&:hover": {
-    boxShadow: "0 6px 32px rgba(103,194,58,0.5)",
-  },
-};
-
 export const goldButtonSx = {
   fontWeight: 900,
-  px: 3.5,
+  px: 3,
   py: 1.5,
-  fontSize: "1.05rem",
-  color: "#050805",
-  background: "linear-gradient(180deg, #FFF176 0%, #FFD54F 45%, #FF8F00 100%)",
-  boxShadow: "0 4px 28px rgba(255,193,7,0.45), inset 0 1px 0 rgba(255,255,255,0.35)",
+  fontSize: "1rem",
+  color: "#030703",
+  background: `linear-gradient(180deg, ${campaignColors.gold} 0%, ${campaignColors.goldCta} 100%)`,
+  boxShadow: "0 4px 28px rgba(255,196,0,0.35), inset 0 1px 0 rgba(255,255,255,0.25)",
   "&:hover": {
-    background: "linear-gradient(180deg, #FFF59D 0%, #FFE082 45%, #FFB300 100%)",
-    boxShadow: "0 6px 36px rgba(255,193,7,0.55)",
+    background: `linear-gradient(180deg, #FFE566 0%, ${campaignColors.gold} 100%)`,
+    boxShadow: "0 6px 36px rgba(255,196,0,0.45)",
   },
 };
+
+export const greenButtonSx = {
+  fontWeight: 800,
+  px: 3,
+  py: 1.4,
+  fontSize: "0.95rem",
+  color: campaignColors.textPrimary,
+  border: `2px solid ${campaignColors.neonGreenSecondary}`,
+  bgcolor: "rgba(23,201,100,0.12)",
+  "&:hover": {
+    bgcolor: "rgba(23,201,100,0.2)",
+    borderColor: campaignColors.neonGreen,
+  },
+};
+
+/** @deprecated use greenButtonSx */
+export const neonButtonSx = greenButtonSx;

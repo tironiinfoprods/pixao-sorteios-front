@@ -1,47 +1,101 @@
 import * as React from "react";
-import { Box, Chip, Stack, Typography, CircularProgress } from "@mui/material";
-import GridViewRoundedIcon from "@mui/icons-material/GridViewRounded";
+import { Box, Stack, Typography, Skeleton } from "@mui/material";
 import { loadNumbersForDraw } from "../../utils/homeApi";
 import { campaignColors } from "../../theme/campaignTheme";
 
 const LEGEND = [
-  { label: "Disponível", sx: { bgcolor: "rgba(103,194,58,0.35)", border: "2px solid #7CFF4D", color: "#fff" } },
-  { label: "Reservado", sx: { bgcolor: "rgba(255,193,7,0.3)", border: "2px solid #FFC107", color: "#fff" } },
-  { label: "Indisponível", sx: { bgcolor: "rgba(211,47,47,0.35)", border: "2px solid #EF5350", color: "#fff" } },
+  { label: "Disponível", color: campaignColors.neonGreenSecondary },
+  { label: "Reservado", color: campaignColors.reserved },
+  { label: "Indisponível", color: campaignColors.unavailable },
 ];
 
 function sxForStatus(st) {
   const s = String(st || "").toLowerCase();
   if (s === "sold" || s === "taken") {
-    return {
-      bgcolor: "rgba(211,47,47,0.4)",
-      border: "2px solid",
-      borderColor: "#EF5350",
-      color: "#fff",
-    };
+    return { bgcolor: "rgba(255,59,59,0.2)", border: "1px solid", borderColor: campaignColors.unavailable, color: "#fff" };
   }
   if (s === "reserved") {
-    return {
-      bgcolor: "rgba(255,193,7,0.35)",
-      border: "2px solid",
-      borderColor: "#FFD54F",
-      color: "#050805",
-      fontWeight: 900,
-    };
+    return { bgcolor: "rgba(255,176,32,0.2)", border: "1px solid", borderColor: campaignColors.reserved, color: "#fff" };
   }
-  return {
-    bgcolor: "rgba(103,194,58,0.3)",
-    border: "2px solid",
-    borderColor: "#7CFF4D",
-    color: "#fff",
-  };
+  return { bgcolor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.12)", color: campaignColors.textSecondary };
 }
 
-export default function NumbersMiniBoard({ drawId, productKey }) {
-  const [nums, setNums] = React.useState([]);
-  const [loading, setLoading] = React.useState(true);
+function computeStats(statusByN) {
+  let available = 0;
+  let reserved = 0;
+  let unavailable = 0;
+  for (let i = 0; i < 100; i++) {
+    const st = String(statusByN[i] || "available").toLowerCase();
+    if (st === "sold" || st === "taken") unavailable++;
+    else if (st === "reserved") reserved++;
+    else available++;
+  }
+  return { available, reserved, unavailable };
+}
+
+function NumbersGrid({ statusByN }) {
+  return (
+    <Box
+      sx={{
+        display: "grid",
+        gridTemplateColumns: "repeat(10, minmax(0, 1fr))",
+        gap: "4px",
+        width: "100%",
+      }}
+    >
+      {Array.from({ length: 100 }).map((_, i) => {
+        const st = statusByN[i] || "available";
+        const label = String(i).padStart(2, "0");
+        return (
+          <Box
+            key={i}
+            title={`${label} — ${st}`}
+            sx={{
+              aspectRatio: "1 / 1",
+              borderRadius: 0.5,
+              fontSize: { xs: "clamp(9px, 2.6vw, 11px)", sm: 10 },
+              fontWeight: 700,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              userSelect: "none",
+              minWidth: 0,
+              ...sxForStatus(st),
+            }}
+          >
+            {label}
+          </Box>
+        );
+      })}
+    </Box>
+  );
+}
+
+function NumbersGridSkeleton() {
+  return (
+    <Box sx={{ display: "grid", gridTemplateColumns: "repeat(10, minmax(0, 1fr))", gap: "4px" }}>
+      {Array.from({ length: 100 }).map((_, i) => (
+        <Skeleton key={i} variant="rounded" sx={{ aspectRatio: "1 / 1", bgcolor: "rgba(255,255,255,0.04)" }} />
+      ))}
+    </Box>
+  );
+}
+
+function NumbersMiniBoardInner({ drawId, productKey, numbers: preloadedNumbers, numbersLoading }) {
+  const [nums, setNums] = React.useState(preloadedNumbers || []);
+  const [loading, setLoading] = React.useState(numbersLoading !== false && !preloadedNumbers?.length);
 
   React.useEffect(() => {
+    if (preloadedNumbers?.length) {
+      setNums(preloadedNumbers);
+      setLoading(false);
+      return undefined;
+    }
+    if (numbersLoading === false && !preloadedNumbers) {
+      setLoading(false);
+      return undefined;
+    }
+
     let alive = true;
     setLoading(true);
     (async () => {
@@ -54,7 +108,7 @@ export default function NumbersMiniBoard({ drawId, productKey }) {
     return () => {
       alive = false;
     };
-  }, [drawId, productKey]);
+  }, [drawId, productKey, preloadedNumbers, numbersLoading]);
 
   const statusByN = React.useMemo(() => {
     const m = {};
@@ -62,96 +116,41 @@ export default function NumbersMiniBoard({ drawId, productKey }) {
     return m;
   }, [nums]);
 
-  const stats = React.useMemo(() => {
-    let available = 0;
-    let reserved = 0;
-    let unavailable = 0;
-    for (let i = 0; i < 100; i++) {
-      const st = String(statusByN[i] || "available").toLowerCase();
-      if (st === "sold" || st === "taken") unavailable++;
-      else if (st === "reserved") reserved++;
-      else available++;
-    }
-    return { available, reserved, unavailable };
-  }, [statusByN]);
+  const stats = React.useMemo(() => computeStats(statusByN), [statusByN]);
 
   return (
     <Box
       sx={{
-        mt: 2,
+        mt: 1.5,
         p: { xs: 1.25, sm: 1.5 },
-        borderRadius: 2.5,
-        border: `2px solid ${campaignColors.borderNeon}`,
-        bgcolor: "rgba(5,8,5,0.6)",
-        boxShadow: "inset 0 0 24px rgba(103,194,58,0.06)",
+        borderRadius: 1.5,
+        bgcolor: "rgba(3,7,3,0.5)",
+        border: "1px solid rgba(255,255,255,0.06)",
       }}
     >
-      <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.25 }}>
-        <GridViewRoundedIcon sx={{ fontSize: 20, color: "primary.light" }} />
-        <Typography variant="subtitle2" sx={{ fontWeight: 900, color: "primary.light" }}>
-          Tabela de números
-        </Typography>
-        <Typography variant="caption" sx={{ color: "text.secondary", ml: "auto" }}>
-          {stats.available} disp. · {stats.reserved} reserv. · {stats.unavailable} indisp.
-        </Typography>
-      </Stack>
+      <Typography variant="body2" sx={{ fontWeight: 700, color: campaignColors.textPrimary, mb: 0.5, fontSize: "0.85rem" }}>
+        Veja os números disponíveis abaixo
+      </Typography>
+      <Typography variant="caption" sx={{ color: campaignColors.textSecondary, display: "block", mb: 1.25 }}>
+        {loading
+          ? "Carregando tabela…"
+          : `${stats.available} disponíveis · ${stats.reserved} reservados · ${stats.unavailable} indisponíveis`}
+      </Typography>
 
-      <Stack direction="row" spacing={0.75} sx={{ mb: 1.25, flexWrap: "wrap" }} aria-label="Legenda dos números">
+      <Stack direction="row" spacing={1} sx={{ mb: 1.25, flexWrap: "wrap" }} aria-label="Legenda">
         {LEGEND.map((item) => (
-          <Chip
-            key={item.label}
-            size="small"
-            label={item.label}
-            sx={{ ...item.sx, fontWeight: 700, fontSize: 10, height: 24 }}
-          />
+          <Stack key={item.label} direction="row" spacing={0.5} alignItems="center">
+            <Box sx={{ width: 10, height: 10, borderRadius: "50%", bgcolor: item.color }} />
+            <Typography variant="caption" sx={{ color: campaignColors.textSecondary, fontSize: "0.7rem" }}>
+              {item.label}
+            </Typography>
+          </Stack>
         ))}
       </Stack>
 
-      {loading ? (
-        <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
-          <CircularProgress size={28} sx={{ color: "primary.main" }} />
-        </Box>
-      ) : (
-        <Box
-          sx={{
-            display: "grid",
-            gridTemplateColumns: "repeat(10, 1fr)",
-            gap: { xs: 0.5, sm: 0.45 },
-          }}
-        >
-          {Array.from({ length: 100 }).map((_, i) => {
-            const st = statusByN[i] || "available";
-            const label = String(i).padStart(2, "0");
-            const isTaken = ["sold", "taken", "reserved"].includes(String(st).toLowerCase());
-            return (
-              <Box
-                key={i}
-                title={`${label} — ${st}`}
-                sx={{
-                  aspectRatio: "1 / 1",
-                  minHeight: { xs: 26, sm: 22 },
-                  borderRadius: 0.75,
-                  fontSize: { xs: 10, sm: 9 },
-                  fontWeight: 900,
-                  lineHeight: 1,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  userSelect: "none",
-                  opacity: isTaken ? 1 : 0.95,
-                  ...sxForStatus(st),
-                }}
-              >
-                {label}
-              </Box>
-            );
-          })}
-        </Box>
-      )}
-
-      <Typography variant="caption" sx={{ color: "text.secondary", display: "block", mt: 1, textAlign: "center" }}>
-        Visualização em tempo real — somente leitura
-      </Typography>
+      {loading ? <NumbersGridSkeleton /> : <NumbersGrid statusByN={statusByN} />}
     </Box>
   );
 }
+
+export default React.memo(NumbersMiniBoardInner);

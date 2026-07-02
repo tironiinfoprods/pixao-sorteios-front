@@ -41,3 +41,17 @@ export function scrollToId(id) {
   const el = document.getElementById(id);
   if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
 }
+
+export function getPlanTier(cards, row) {
+  const sorted = sortCardsByPrize(cards);
+  const idx = sorted.findIndex((c) => c?.product?.id === row?.product?.id);
+  if (idx === 0) return "featured";
+  if (idx === 1) return "intermediate";
+  return "entry";
+}
+
+export const PLAN_BADGE_LABELS = {
+  featured: "Maior prêmio",
+  intermediate: "Intermediário",
+  entry: "Entrada",
+};

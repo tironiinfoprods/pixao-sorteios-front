@@ -13,7 +13,7 @@ export default function HomeFooter() {
         bgcolor: "rgba(5,8,5,0.98)",
       }}
     >
-      <Container maxWidth="lg" sx={{ py: { xs: 4, md: 5 } }}>
+      <Container maxWidth="lg" disableGutters sx={{ px: { xs: 1.25, sm: 2, md: 3 }, py: { xs: 3, md: 5 } }}>
         <Typography
           variant="body2"
           sx={{ color: "text.secondary", lineHeight: 1.7, fontSize: { xs: "0.875rem", md: "0.9rem" } }}

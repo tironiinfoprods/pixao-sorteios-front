@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Chip, LinearProgress, Stack, Typography } from "@mui/material";
+import { Box, Chip, LinearProgress, Stack, Typography } from "@mui/material";
 import BoltRoundedIcon from "@mui/icons-material/BoltRounded";
 
 export default function ProgressNumbers({ total = 100, reserved = 0, sold = 0, showUrgency = false }) {
@@ -10,15 +10,33 @@ export default function ProgressNumbers({ total = 100, reserved = 0, sold = 0, s
 
   return (
     <Stack spacing={0.75}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" useFlexGap>
-        <Typography variant="caption" sx={{ fontWeight: 700, color: "text.secondary" }}>
-          {left} disponíveis · {reserved || 0} reservados · {sold || 0} indisponíveis
+      <Stack
+        direction={{ xs: "column", sm: "row" }}
+        spacing={0.75}
+        justifyContent="space-between"
+        alignItems={{ xs: "flex-start", sm: "center" }}
+      >
+        <Typography
+          variant="caption"
+          sx={{
+            fontWeight: 700,
+            color: "text.secondary",
+            fontSize: { xs: "0.72rem", sm: "0.75rem" },
+            lineHeight: 1.4,
+          }}
+        >
+          <Box component="span" sx={{ display: { xs: "block", sm: "inline" } }}>
+            {left} disponíveis · {reserved || 0} reservados
+          </Box>
+          <Box component="span" sx={{ display: { xs: "block", sm: "inline" } }}>
+            {sold || 0} indisponíveis
+          </Box>
         </Typography>
         {showUrgency && lowStock ? (
           <Chip
             size="small"
             icon={<BoltRoundedIcon sx={{ fontSize: 16 }} />}
-            label={`Restam ${left} números`}
+            label={`Restam ${left}`}
             color="warning"
             sx={{ fontWeight: 800, height: 24 }}
           />

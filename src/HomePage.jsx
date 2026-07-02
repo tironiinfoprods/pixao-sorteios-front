@@ -29,7 +29,7 @@ import {
   fetchJSON,
   useInfoproductCards,
 } from "./utils/homeApi";
-import { BRL, pickFeaturedCard, scrollToId } from "./utils/homeHelpers";
+import { BRL, scrollToId } from "./utils/homeHelpers";
 import { trackEvent, AnalyticsEvents } from "./utils/analytics";
 
 import CampaignHero from "./components/home/CampaignHero";
@@ -113,8 +113,6 @@ export default function HomePage({ groupUrl = "https://chat.whatsapp.com/Byb4qBR
   };
 
   const { loading, cards } = useInfoproductCards("lotomania");
-  const featured = React.useMemo(() => pickFeaturedCard(cards), [cards]);
-  const featuredId = featured?.product?.id;
 
   const [showStickyCta, setShowStickyCta] = React.useState(false);
 
@@ -289,25 +287,29 @@ export default function HomePage({ groupUrl = "https://chat.whatsapp.com/Byb4qBR
         onGoConta={goConta}
         onGoLogin={goLogin}
         onLogout={doLogout}
+        onScrollToPlans={scrollToPlans}
       />
 
-      <Container maxWidth="lg" sx={{ py: { xs: 2.5, md: 4 }, pb: { xs: 14, md: 5 } }}>
-        <CampaignHero
-          loading={loading}
-          cards={cards}
-          onScrollToPlans={scrollToPlans}
-          onScrollToHowItWorks={scrollToHowItWorks}
-        />
+      <CampaignHero
+        loading={loading}
+        cards={cards}
+        onScrollToPlans={scrollToPlans}
+        onScrollToHowItWorks={scrollToHowItWorks}
+      />
 
+      <Container
+        maxWidth="lg"
+        disableGutters
+        sx={{
+          px: { xs: 1.25, sm: 2, md: 3 },
+          py: { xs: 1.5, md: 3 },
+          pb: { xs: 16, md: 5 },
+          overflow: "hidden",
+        }}
+      >
         <HowItWorksSection />
 
-        <PlansSection
-          cards={cards}
-          loading={loading}
-          featuredId={featuredId}
-          onBuy={onBuyClick}
-          isAuthenticated={isAuthenticated}
-        />
+        <PlansSection cards={cards} loading={loading} onBuy={onBuyClick} isAuthenticated={isAuthenticated} />
 
         <WinnerRulesBlock />
 

@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Box, Button, Slide } from "@mui/material";
-import { campaignColors, neonButtonSx } from "../../theme/campaignTheme";
+import { campaignColors, goldButtonSx } from "../../theme/campaignTheme";
 import { trackEvent, AnalyticsEvents } from "../../utils/analytics";
 
 export default function StickyMobileCta({ visible, onClick }) {
@@ -21,21 +21,14 @@ export default function StickyMobileCta({ visible, onClick }) {
           left: 0,
           right: 0,
           zIndex: 1200,
-          px: 2,
-          pt: 1.5,
-          bgcolor: "rgba(5,8,5,0.96)",
+          px: 1.25,
+          pt: 1,
+          bgcolor: "rgba(3,7,3,0.97)",
           borderTop: `1px solid ${campaignColors.borderNeon}`,
           backdropFilter: "blur(12px)",
         }}
       >
-        <Button
-          fullWidth
-          color="success"
-          variant="contained"
-          size="large"
-          onClick={handleClick}
-          sx={neonButtonSx}
-        >
+        <Button fullWidth variant="contained" size="large" onClick={handleClick} sx={{ ...goldButtonSx, minHeight: 50 }}>
           Escolher números
         </Button>
       </Box>

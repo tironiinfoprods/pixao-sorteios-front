@@ -10,8 +10,8 @@ export default function WinnerRulesBlock() {
         p: { xs: 2, md: 2.5 },
         mb: { xs: 3, md: 4 },
         borderRadius: 2.5,
-        border: `1px solid ${campaignColors.borderNeon}`,
-        bgcolor: "rgba(103,194,58,0.04)",
+        border: "1px solid rgba(255,255,255,0.08)",
+        bgcolor: campaignColors.bgPaper,
       }}
     >
       <Typography sx={{ fontWeight: 800, mb: 0.75 }}>Como o vencedor é definido</Typography>

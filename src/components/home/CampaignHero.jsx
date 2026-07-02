@@ -1,174 +1,124 @@
 import * as React from "react";
-import { Box, Button, Paper, Stack, Typography, Skeleton } from "@mui/material";
-import EmojiEventsRoundedIcon from "@mui/icons-material/EmojiEventsRounded";
-import BoltRoundedIcon from "@mui/icons-material/BoltRounded";
-import ConfirmationNumberRoundedIcon from "@mui/icons-material/ConfirmationNumberRounded";
-import PaidRoundedIcon from "@mui/icons-material/PaidRounded";
+import { Box, Button, Stack, Typography, Skeleton } from "@mui/material";
 import heroImage from "../../hero_image.png";
 import lotomaniaLogo from "../../lotomania-logo.png";
-import { campaignColors, goldButtonSx } from "../../theme/campaignTheme";
+import { campaignColors, goldButtonSx, greenButtonSx } from "../../theme/campaignTheme";
 import { BRL, getTopPrizes } from "../../utils/homeHelpers";
 import { trackEvent, AnalyticsEvents } from "../../utils/analytics";
 
 const FALLBACK_PRIZES = [
-  { label: "1º Prêmio", amount: 10000, rank: 1 },
-  { label: "2º Prêmio", amount: 5000, rank: 2 },
-  { label: "3º Prêmio", amount: 2500, rank: 3 },
+  { label: "Prêmio principal", amount: 10000, rank: 1 },
+  { label: "2º sorteio", amount: 5000, rank: 2 },
+  { label: "3º sorteio", amount: 2500, rank: 3 },
 ];
 
-function formatPrizeHero(amount) {
+function formatPrizeHero(amount, large = false) {
   if (amount >= 1000 && amount % 1000 === 0) {
     return `R$ ${Math.round(amount / 1000)} MIL`;
   }
   return BRL.format(amount);
 }
 
-function HeroDecorations() {
-  const dots = [
-    { top: "8%", left: "4%", size: 6, color: "#7CFF4D", delay: "0s" },
-    { top: "18%", right: "6%", size: 8, color: "#FFD54F", delay: "0.5s" },
-    { top: "55%", left: "2%", size: 5, color: "#FFD54F", delay: "1s" },
-    { top: "70%", right: "4%", size: 7, color: "#7CFF4D", delay: "1.5s" },
-    { top: "35%", left: "48%", size: 4, color: "#fff", delay: "0.8s" },
-  ];
+function MainPrizeCard({ label, amount, loading }) {
   return (
-    <>
-      {dots.map((d, i) => (
-        <Box
-          key={i}
-          aria-hidden
-          className="hero-sparkle"
-          sx={{
-            position: "absolute",
-            top: d.top,
-            left: d.left,
-            right: d.right,
-            width: d.size,
-            height: d.size,
-            borderRadius: "50%",
-            bgcolor: d.color,
-            boxShadow: `0 0 ${d.size * 2}px ${d.color}`,
-            animationDelay: d.delay,
-          }}
-        />
-      ))}
-      <Box
-        aria-hidden
-        sx={{
-          position: "absolute",
-          bottom: -20,
-          left: "50%",
-          transform: "translateX(-50%)",
-          width: "80%",
-          height: 120,
-          background: "radial-gradient(ellipse, rgba(103,194,58,0.25) 0%, transparent 70%)",
-          pointerEvents: "none",
-        }}
-      />
-    </>
-  );
-}
-
-function PrizeTower({ label, amount, loading, rank }) {
-  const isFirst = rank === 1;
-  return (
-    <Paper
-      elevation={0}
-      className={isFirst ? "hero-prize-glow" : undefined}
+    <Box
+      className="hero-prize-glow"
       sx={{
-        flex: 1,
-        minWidth: { xs: "100%", sm: 0 },
-        p: { xs: 2, sm: 2.5 },
-        textAlign: "center",
         position: "relative",
-        borderRadius: 3,
-        border: isFirst ? "2px solid #FFD54F" : "2px solid #7CFF4D",
-        background: isFirst
-          ? "linear-gradient(180deg, rgba(255,213,79,0.18) 0%, rgba(20,26,20,0.95) 40%, rgba(5,8,5,0.98) 100%)"
-          : "linear-gradient(180deg, rgba(103,194,58,0.14) 0%, rgba(15,18,15,0.95) 50%, rgba(5,8,5,0.98) 100%)",
-        boxShadow: isFirst
-          ? "0 0 40px rgba(255,193,7,0.25), inset 0 1px 0 rgba(255,255,255,0.1)"
-          : "0 0 24px rgba(103,194,58,0.15), inset 0 1px 0 rgba(255,255,255,0.06)",
-        transform: isFirst ? { md: "scale(1.05)" } : "none",
-        zIndex: isFirst ? 2 : 1,
+        p: { xs: 2.5, sm: 3, md: 4 },
+        borderRadius: { xs: 2, md: 3 },
+        textAlign: "center",
+        border: `2px solid ${campaignColors.gold}`,
+        background: `
+          radial-gradient(ellipse 80% 60% at 50% 0%, rgba(255,212,59,0.22) 0%, transparent 60%),
+          linear-gradient(180deg, rgba(7,16,8,0.95) 0%, rgba(3,7,3,0.98) 100%)
+        `,
+        boxShadow: "0 0 60px rgba(255,196,0,0.18), inset 0 1px 0 rgba(255,255,255,0.08)",
       }}
     >
       <Box
         sx={{
-          position: "absolute",
-          top: -1,
-          left: "50%",
-          transform: "translateX(-50%)",
+          display: "inline-block",
           px: 1.5,
-          py: 0.25,
-          borderRadius: "0 0 8px 8px",
-          bgcolor: isFirst ? "#FFD54F" : "#7CFF4D",
-          color: "#050805",
+          py: 0.35,
+          mb: 1.5,
+          borderRadius: 99,
+          bgcolor: "rgba(255,212,59,0.15)",
+          border: `1px solid ${campaignColors.borderGold}`,
         }}
       >
-        <Typography variant="caption" sx={{ fontWeight: 900, letterSpacing: 1, fontSize: "0.65rem" }}>
-          {label.toUpperCase()}
+        <Typography variant="caption" sx={{ fontWeight: 800, color: campaignColors.gold, letterSpacing: 1 }}>
+          PRÊMIO PRINCIPAL
         </Typography>
       </Box>
 
-      <Box sx={{ pt: 2, pb: 1 }}>
-        <PaidRoundedIcon
-          sx={{
-            fontSize: { xs: 36, sm: 44 },
-            color: isFirst ? "#FFD54F" : "#7CFF4D",
-            filter: isFirst ? "drop-shadow(0 0 8px rgba(255,213,79,0.8))" : "drop-shadow(0 0 6px rgba(124,255,77,0.6))",
-            mb: 1,
-          }}
-        />
-        {loading ? (
-          <Skeleton variant="text" width="80%" sx={{ mx: "auto", fontSize: "2.5rem" }} />
-        ) : (
-          <Typography
-            component="p"
-            sx={{
-              fontWeight: 900,
-              lineHeight: 1,
-              fontSize: { xs: "2rem", sm: "2.35rem", md: isFirst ? "2.75rem" : "2.1rem" },
-              background: isFirst
-                ? "linear-gradient(180deg, #FFF176 0%, #FFD54F 40%, #FF8F00 100%)"
-                : "linear-gradient(180deg, #B9FF6A 0%, #7CFF4D 50%, #59b15f 100%)",
-              WebkitBackgroundClip: "text",
-              backgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-              textShadow: isFirst ? "0 2px 20px rgba(255,193,7,0.4)" : "none",
-              filter: isFirst ? "drop-shadow(0 0 12px rgba(255,213,79,0.35))" : "drop-shadow(0 0 8px rgba(124,255,77,0.3))",
-            }}
-          >
-            {formatPrizeHero(amount)}
-          </Typography>
-        )}
+      {loading ? (
+        <Skeleton variant="text" sx={{ fontSize: "3.5rem", maxWidth: 280, mx: "auto" }} />
+      ) : (
         <Typography
-          variant="caption"
+          component="p"
           sx={{
-            display: "block",
-            mt: 0.75,
-            fontWeight: 800,
-            color: "text.secondary",
-            letterSpacing: 0.5,
+            fontWeight: 900,
+            lineHeight: 0.95,
+            fontSize: { xs: "2.75rem", sm: "3.5rem", md: "4.25rem" },
+            background: `linear-gradient(180deg, #FFF 0%, ${campaignColors.gold} 55%, #E6A800 100%)`,
+            WebkitBackgroundClip: "text",
+            backgroundClip: "text",
+            WebkitTextFillColor: "transparent",
+            filter: "drop-shadow(0 4px 24px rgba(255,196,0,0.35))",
           }}
         >
-          em dinheiro
+          {formatPrizeHero(amount, true)}
         </Typography>
-      </Box>
-    </Paper>
+      )}
+      <Typography variant="body2" sx={{ mt: 1, color: campaignColors.textSecondary, fontWeight: 600 }}>
+        em prêmio em dinheiro
+      </Typography>
+    </Box>
+  );
+}
+
+function SecondaryPrizeCard({ label, amount, loading }) {
+  return (
+    <Box
+      sx={{
+        flex: 1,
+        p: { xs: 1.5, sm: 2 },
+        borderRadius: 2,
+        textAlign: "center",
+        border: `1px solid ${campaignColors.borderNeon}`,
+        bgcolor: "rgba(7,16,8,0.85)",
+        boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
+      }}
+    >
+      <Typography variant="caption" sx={{ fontWeight: 700, color: campaignColors.textSecondary, letterSpacing: 0.5 }}>
+        {label.toUpperCase()}
+      </Typography>
+      {loading ? (
+        <Skeleton variant="text" sx={{ fontSize: "1.5rem", mt: 0.5 }} />
+      ) : (
+        <Typography
+          sx={{
+            mt: 0.5,
+            fontWeight: 900,
+            fontSize: { xs: "1.35rem", sm: "1.6rem" },
+            color: campaignColors.neonGreenSecondary,
+          }}
+        >
+          {formatPrizeHero(amount)}
+        </Typography>
+      )}
+    </Box>
   );
 }
 
 export default function CampaignHero({ loading, cards, onScrollToPlans, onScrollToHowItWorks }) {
   const prizes = loading ? FALLBACK_PRIZES : getTopPrizes(cards, 3);
-  const displayPrizes =
-    prizes.length >= 3
-      ? prizes.map((p, i) => ({ ...p, rank: i + 1 }))
-      : FALLBACK_PRIZES.map((fb, i) => ({
-          label: fb.label,
-          amount: prizes[i]?.amount ?? fb.amount,
-          rank: i + 1,
-        }));
+  const main = prizes[0] || FALLBACK_PRIZES[0];
+  const secondary = [
+    prizes[1] || { label: "2º sorteio", amount: 5000 },
+    prizes[2] || { label: "3º sorteio", amount: 2500 },
+  ];
 
   const handlePrimaryCta = () => {
     trackEvent(AnalyticsEvents.HERO_CTA);
@@ -182,24 +132,22 @@ export default function CampaignHero({ loading, cards, onScrollToPlans, onScroll
   };
 
   return (
-    <Paper
-      elevation={0}
+    <Box
       component="section"
-      aria-label="Apresentação do Pixão na Mão"
+      aria-label="Campanha Pixão na Mão"
       sx={{
-        p: { xs: 2.5, md: 4 },
-        mb: { xs: 3, md: 4 },
-        borderRadius: 4,
         position: "relative",
+        width: "100%",
         overflow: "hidden",
-        border: "2px solid rgba(124,255,77,0.5)",
-        boxShadow: "0 0 60px rgba(103,194,58,0.12), inset 0 0 80px rgba(103,194,58,0.04)",
+        py: { xs: 3, sm: 4, md: 5 },
+        px: { xs: 1.25, sm: 2, md: 3 },
+        mb: { xs: 2, md: 3 },
         background: `
-          radial-gradient(ellipse 120% 80% at 50% -20%, rgba(103,194,58,0.35) 0%, transparent 55%),
-          radial-gradient(ellipse 80% 50% at 100% 50%, rgba(255,193,7,0.08) 0%, transparent 50%),
-          radial-gradient(ellipse 80% 50% at 0% 80%, rgba(103,194,58,0.12) 0%, transparent 50%),
-          linear-gradient(180deg, #0a120a 0%, #050805 100%)
+          radial-gradient(ellipse 100% 80% at 50% -30%, rgba(57,255,20,0.12) 0%, transparent 55%),
+          radial-gradient(ellipse 60% 40% at 80% 20%, rgba(255,212,59,0.08) 0%, transparent 50%),
+          linear-gradient(180deg, #030703 0%, #050a05 100%)
         `,
+        borderBottom: `1px solid ${campaignColors.borderNeon}`,
       }}
     >
       <Box
@@ -209,177 +157,90 @@ export default function CampaignHero({ loading, cards, onScrollToPlans, onScroll
           inset: 0,
           backgroundImage: `url(${heroImage})`,
           backgroundSize: "cover",
-          backgroundPosition: "center top",
-          opacity: 0.08,
-          mixBlendMode: "luminosity",
+          backgroundPosition: "center 20%",
+          opacity: 0.06,
         }}
       />
-      <HeroDecorations />
 
-      <Stack spacing={3} sx={{ position: "relative", zIndex: 1 }}>
+      <Stack spacing={{ xs: 2.5, md: 3.5 }} sx={{ position: "relative", zIndex: 1, maxWidth: 960, mx: "auto" }}>
         <Stack direction="row" spacing={1} alignItems="center" justifyContent="center" flexWrap="wrap" useFlexGap>
           {lotomaniaLogo ? (
-            <Box component="img" src={lotomaniaLogo} alt="Lotomania" sx={{ height: 28, objectFit: "contain", opacity: 0.9 }} />
+            <Box component="img" src={lotomaniaLogo} alt="Lotomania" sx={{ height: { xs: 22, sm: 26 }, opacity: 0.85 }} />
           ) : null}
-          <Box
-            sx={{
-              px: 2,
-              py: 0.6,
-              borderRadius: 99,
-              bgcolor: "#FFD54F",
-              color: "#050805",
-              boxShadow: "0 0 20px rgba(255,213,79,0.5)",
-            }}
-          >
-            <Typography variant="caption" sx={{ fontWeight: 900, letterSpacing: 1.5, fontSize: "0.7rem" }}>
-              PRÊMIO EM DINHEIRO
-            </Typography>
-          </Box>
+          <Typography variant="caption" sx={{ color: campaignColors.neonGreenSecondary, fontWeight: 800, letterSpacing: 2 }}>
+            PIXÃO NA MÃO
+          </Typography>
         </Stack>
 
         <Box sx={{ textAlign: "center" }}>
           <Typography
-            component="p"
-            variant="overline"
-            sx={{
-              color: "#7CFF4D",
-              fontWeight: 900,
-              letterSpacing: 3,
-              fontSize: { xs: "0.7rem", sm: "0.8rem" },
-              textShadow: "0 0 20px rgba(124,255,77,0.5)",
-              mb: 0.5,
-            }}
-          >
-            PIXÃO NA MÃO
-          </Typography>
-          <Typography
             component="h1"
             sx={{
               fontWeight: 900,
-              lineHeight: 1,
-              fontSize: { xs: "2.5rem", sm: "3.25rem", md: "3.75rem" },
-              mb: 1.5,
+              lineHeight: 1.08,
+              fontSize: { xs: "1.75rem", sm: "2.35rem", md: "2.85rem" },
+              color: campaignColors.textPrimary,
+              mb: 1.25,
+              px: { xs: 0.5, sm: 0 },
             }}
           >
-            <Box
-              component="span"
-              sx={{
-                display: "block",
-                color: "#fff",
-                textShadow: "0 0 30px rgba(124,255,77,0.4), 2px 2px 0 rgba(103,194,58,0.3)",
-              }}
-            >
-              TRÊS
-            </Box>
-            <Box
-              component="span"
-              sx={{
-                display: "block",
-                background: "linear-gradient(180deg, #FFF176 0%, #FFD54F 50%, #FF8F00 100%)",
-                WebkitBackgroundClip: "text",
-                backgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-                filter: "drop-shadow(0 4px 12px rgba(255,193,7,0.4))",
-              }}
-            >
-              SORTEIOS!
+            Escolha seu número e participe dos{" "}
+            <Box component="span" sx={{ color: campaignColors.gold }}>
+              3 sorteios
             </Box>
           </Typography>
           <Typography
-            variant="body1"
             sx={{
-              color: "text.secondary",
-              maxWidth: 520,
+              color: campaignColors.textSecondary,
+              maxWidth: 560,
               mx: "auto",
-              lineHeight: 1.55,
-              fontSize: { xs: "0.95rem", sm: "1.05rem" },
+              lineHeight: 1.6,
+              fontSize: { xs: "0.9rem", sm: "1.05rem" },
+              px: { xs: 0.25, sm: 0 },
             }}
           >
-            Escolha seu e-book, selecione seus números e acompanhe tudo de forma transparente.
+            São prêmios em dinheiro de R$ 10 mil, R$ 5 mil e R$ 2.500. Escolha seu e-book, selecione seus números e
+            acompanhe tudo pelo site.
           </Typography>
         </Box>
 
-        <Stack
-          direction={{ xs: "column", sm: "row" }}
-          spacing={1.5}
-          sx={{ width: "100%", alignItems: "stretch" }}
-        >
-          {displayPrizes.map((p) => (
-            <PrizeTower
-              key={p.label}
-              label={p.label}
-              amount={p.amount}
-              loading={loading}
-              rank={p.rank}
-            />
-          ))}
+        <Stack spacing={1.25}>
+          <MainPrizeCard label={main.label} amount={main.amount} loading={loading} />
+          <Stack direction="row" spacing={1.25}>
+            {secondary.map((p) => (
+              <SecondaryPrizeCard key={p.label} label={p.label} amount={p.amount} loading={loading} />
+            ))}
+          </Stack>
         </Stack>
 
-        <Stack
-          direction={{ xs: "column", sm: "row" }}
-          spacing={1.5}
-          justifyContent="center"
-          sx={{ flexWrap: "wrap" }}
-        >
-          {[
-            { icon: PaidRoundedIcon, text: "Prêmios em dinheiro" },
-            { icon: BoltRoundedIcon, text: "Sorteio transparente" },
-            { icon: ConfirmationNumberRoundedIcon, text: "Escolha seu número" },
-          ].map(({ icon: Icon, text }) => (
-            <Box
-              key={text}
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                gap: 1,
-                px: 1.5,
-                py: 1,
-                borderRadius: 2,
-                border: `1px solid ${campaignColors.borderNeon}`,
-                bgcolor: "rgba(103,194,58,0.06)",
-                flex: { xs: "1 1 100%", sm: "0 1 auto" },
-                justifyContent: { xs: "center", sm: "flex-start" },
-              }}
-            >
-              <Icon sx={{ fontSize: 20, color: "primary.light" }} />
-              <Typography variant="caption" sx={{ fontWeight: 800, color: "primary.light" }}>
-                {text.toUpperCase()}
-              </Typography>
-            </Box>
-          ))}
-        </Stack>
-
-        <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} justifyContent="center" sx={{ pt: 0.5 }}>
+        <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25} sx={{ pt: 0.5 }}>
           <Button
             size="large"
             variant="contained"
             onClick={handlePrimaryCta}
-            startIcon={<EmojiEventsRoundedIcon />}
             sx={{
               ...goldButtonSx,
-              width: { xs: "100%", sm: "auto" },
-              minWidth: { sm: 280 },
+              flex: { sm: 1.2 },
+              minHeight: 52,
+              fontSize: { xs: "1rem", sm: "1.05rem" },
             }}
           >
-            » Escolher meus números «
+            Escolher meus números
           </Button>
           <Button
             size="large"
             variant="outlined"
             onClick={handleSecondaryCta}
             sx={{
-              fontWeight: 800,
-              borderColor: campaignColors.borderNeon,
-              borderWidth: 2,
-              color: "primary.light",
-              width: { xs: "100%", sm: "auto" },
-              "&:hover": { borderColor: "primary.light", bgcolor: "rgba(103,194,58,0.1)" },
+              ...greenButtonSx,
+              flex: 1,
+              minHeight: 52,
             }}
           >
-            Entender como funciona
+            Como funciona
           </Button>
         </Stack>
       </Stack>
-    </Paper>
+    </Box>
   );
 }
