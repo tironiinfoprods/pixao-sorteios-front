@@ -79,11 +79,46 @@ function cpfOk(v) {
   return d1 === parseInt(s[9], 10) && d2 === parseInt(s[10], 10);
 }
 
-// >= 18 anos
-function isAdult(birthISO) {
-  if (!birthISO) return false;
-  const d = new Date(birthISO);
-  if (Number.isNaN(+d)) return false;
+function formatBirthdate(v) {
+  const d = digits(v).slice(0, 8);
+  const dd = d.slice(0, 2);
+  const mm = d.slice(2, 4);
+  const yyyy = d.slice(4, 8);
+  let out = dd;
+  if (mm) out += `/${mm}`;
+  if (yyyy) out += `/${yyyy}`;
+  return out;
+}
+
+function parseBirthdateBR(v) {
+  const d = digits(v);
+  if (d.length !== 8) return null;
+  const day = parseInt(d.slice(0, 2), 10);
+  const month = parseInt(d.slice(2, 4), 10);
+  const year = parseInt(d.slice(4, 8), 10);
+  if (month < 1 || month > 12 || day < 1 || year < 1900 || year > new Date().getFullYear()) return null;
+  const dt = new Date(year, month - 1, day);
+  if (dt.getFullYear() !== year || dt.getMonth() !== month - 1 || dt.getDate() !== day) return null;
+  return dt;
+}
+
+function birthdateOk(v) {
+  return parseBirthdateBR(v) !== null;
+}
+
+function birthdateToISO(v) {
+  const dt = parseBirthdateBR(v);
+  if (!dt) return null;
+  const y = dt.getFullYear();
+  const m = String(dt.getMonth() + 1).padStart(2, '0');
+  const day = String(dt.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+// >= 18 anos (aceita DD/MM/AAAA)
+function isAdult(birthBR) {
+  const d = parseBirthdateBR(birthBR);
+  if (!d) return false;
   const today = new Date();
   let age = today.getFullYear() - d.getFullYear();
   const m = today.getMonth() - d.getMonth();
@@ -271,6 +306,9 @@ export default function RegisterPage() {
     if (name === 'cpf') {
       const masked = formatCpf(value);
       setForm((f) => ({ ...f, cpf: masked }));
+    } else if (name === 'birthdate') {
+      const masked = formatBirthdate(value);
+      setForm((f) => ({ ...f, birthdate: masked }));
     } else if (type === 'checkbox') {
       setForm((f) => ({ ...f, [name]: checked }));
     } else {
@@ -286,6 +324,7 @@ export default function RegisterPage() {
     if (!phoneOk(form.phone)) err.phone = 'Informe um telefone válido com DDD.';
     if (!cpfOk(form.cpf)) err.cpf = 'CPF inválido.';
     if (!form.birthdate) err.birthdate = 'Informe a data de nascimento.';
+    else if (!birthdateOk(form.birthdate)) err.birthdate = 'Data inválida. Use o formato DD/MM/AAAA.';
     else if (!isAdult(form.birthdate)) err.birthdate = 'É necessário ter 18 anos ou mais.';
     if (!form.password) err.password = 'Informe uma senha.';
     if (!form.acceptTerms) err.acceptTerms = 'É necessário aceitar os termos.';
@@ -306,7 +345,7 @@ export default function RegisterPage() {
         email: String(form.email || '').trim().toLowerCase(),
         phone: digits(form.phone),
         cpf: digits(form.cpf),
-        birthdate: form.birthdate, // YYYY-MM-DD
+        birthdate: birthdateToISO(form.birthdate),
         password: String(form.password || ''),
         acceptTerms: !!form.acceptTerms,
       };
@@ -325,7 +364,7 @@ export default function RegisterPage() {
     emailOk(form.email) &&
     phoneOk(form.phone) &&
     cpfOk(form.cpf) &&
-    form.birthdate &&
+    birthdateOk(form.birthdate) &&
     isAdult(form.birthdate) &&
     form.password &&
     form.acceptTerms &&
@@ -432,14 +471,14 @@ export default function RegisterPage() {
                   <TextField
                     label="Data de nascimento"
                     name="birthdate"
-                    type="date"
                     value={form.birthdate}
                     onChange={onChange}
+                    placeholder="DD/MM/AAAA"
+                    inputMode="numeric"
                     fullWidth
                     required
                     error={!!errors.birthdate}
-                    helperText={errors.birthdate}
-                    InputLabelProps={{ shrink: true }}
+                    helperText={errors.birthdate || 'Ex.: 12/11/1989'}
                   />
                 </Stack>
 
