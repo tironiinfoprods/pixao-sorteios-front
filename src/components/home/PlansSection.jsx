@@ -24,8 +24,8 @@ export default function PlansSection({
       <Box
         sx={{
           display: "grid",
-          gridTemplateColumns: { xs: "1fr", md: "repeat(3, 1fr)" },
-          gap: 2.5,
+          gridTemplateColumns: { xs: "1fr", lg: "repeat(3, 1fr)" },
+          gap: 3,
           alignItems: "stretch",
         }}
       >

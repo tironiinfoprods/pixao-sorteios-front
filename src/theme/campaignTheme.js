@@ -67,3 +67,17 @@ export const neonButtonSx = {
     boxShadow: "0 6px 32px rgba(103,194,58,0.5)",
   },
 };
+
+export const goldButtonSx = {
+  fontWeight: 900,
+  px: 3.5,
+  py: 1.5,
+  fontSize: "1.05rem",
+  color: "#050805",
+  background: "linear-gradient(180deg, #FFF176 0%, #FFD54F 45%, #FF8F00 100%)",
+  boxShadow: "0 4px 28px rgba(255,193,7,0.45), inset 0 1px 0 rgba(255,255,255,0.35)",
+  "&:hover": {
+    background: "linear-gradient(180deg, #FFF59D 0%, #FFE082 45%, #FFB300 100%)",
+    boxShadow: "0 6px 36px rgba(255,193,7,0.55)",
+  },
+};
